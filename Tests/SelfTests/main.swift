@@ -21,6 +21,111 @@ func expectDecodeFailure(_ pdu: String, _ message: String) throws {
 }
 
 do {
+    try MainActor.assumeIsolated {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CellDock-archive-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = MessageStore(directory: directory)
+        let pdu = "00040A912143658709000862702110203023044F60597D"
+        let incoming = SMSPDUDecoder.assemble([
+            ModemStoredPDU(index: 2, status: 0, declaredLength: nil, rawPDU: pdu, storage: "ME")
+        ])
+        let first = try store.mergeDurably(incoming)
+        try expect(first.count == 1, "durable intake lost a newly received SMS")
+        let reloaded = MessageStore(directory: directory)
+        try expect(reloaded.messages.first?.body == "你好", "archive acknowledged before readable persistence")
+        try expect(reloaded.messages.first?.rawPDUs == [pdu], "archive discarded raw PDU")
+        let repeated = try store.mergeDurably(incoming)
+        try expect(repeated.isEmpty, "re-poll generated duplicate notification")
+
+        // A directory at the destination forces an actual atomic-write failure.
+        let file = directory.appendingPathComponent("messages.json")
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        do {
+            _ = try store.mergeDurably(incoming)
+            throw SelfTestFailure.failed("unchanged in-memory SMS was acknowledged despite failed disk write")
+        } catch is SelfTestFailure { throw SelfTestFailure.failed("failed save allowed cleanup") }
+        catch { }
+        let emptyDirectory = directory.appendingPathComponent("initial-failure")
+        let emptyStore = MessageStore(directory: emptyDirectory)
+        try FileManager.default.createDirectory(
+            at: emptyDirectory.appendingPathComponent("messages.json"), withIntermediateDirectories: false
+        )
+        let original = emptyStore.messages
+        do {
+            _ = try emptyStore.mergeDurably(incoming)
+            throw SelfTestFailure.failed("failed initial save was acknowledged")
+        } catch is SelfTestFailure { throw SelfTestFailure.failed("failed initial save allowed cleanup") }
+        catch { }
+        try expect(emptyStore.messages == original, "failed save published uncommitted messages")
+    }
+
+    try MainActor.assumeIsolated {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CellDock-cleanup-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = MessageStore(directory: directory)
+        let module = CellularModuleID(rawValue: "usb-location:test")
+        let pdu = "00040A912143658709000862702110203023044F60597D"
+        let stored = ModemStoredPDU(index: 2, status: 0, declaredLength: nil, rawPDU: pdu, storage: "ME")
+        let incoming = SMSPDUDecoder.assemble([stored])
+        let receipt = try store.archiveReceived(incoming, stored: [stored], moduleID: module)
+        try expect(receipt.references.count == 1, "committed incoming SMS never became reclaimable")
+        let restored = MessageStore(directory: directory)
+        let survivor = try restored.archiveReceived([], stored: [stored], moduleID: module)
+        try expect(survivor.references.count == 1, "restart lost cleanup of archived surviving fragments")
+        let otherModule = try restored.archiveReceived([], stored: [stored], moduleID: .compatibilityPrimary)
+        try expect(otherModule.references.isEmpty, "another module's archive authorized deletion")
+        let unknown = ModemStoredPDU(index: 3, status: 0, declaredLength: nil,
+            rawPDU: "00400A9121436587090000627021102030230C050003CC0201D06536FB0D", storage: "ME")
+        let incomplete = try restored.archiveReceived([], stored: [unknown], moduleID: module)
+        try expect(incomplete.references.isEmpty, "unarchived multipart fragment became reclaimable")
+        var assembler = BufferedSMSAssembler()
+        let firstPart = assembler.ingest([unknown])
+        try expect(firstPart.isEmpty, "incomplete SMS was published to archive")
+        let lastPart = ModemStoredPDU(index: 4, status: 0, declaredLength: nil,
+            rawPDU: "00400A9121436587090000627021102030230C050003CC0202D06536FB0D", storage: "ME")
+        let assembled = assembler.ingest([lastPart])
+        let complete = try restored.archiveReceived(assembled, stored: [unknown, lastPart], moduleID: module)
+        try expect(complete.newMessages.first?.body == "hellohello", "multipart archive lost decoded text")
+        try expect(complete.references.map(\.index) == [3, 4], "complete multipart archive omitted cleanup slots")
+        let afterRestart = MessageStore(directory: directory)
+        let partialCleanup = try afterRestart.archiveReceived([], stored: [lastPart], moduleID: module)
+        try expect(partialCleanup.references.map(\.index) == [4], "partial multipart cleanup could not resume after restart")
+        let direct = ModemStoredPDU(index: -1, status: 0, declaredLength: nil, rawPDU: pdu, storage: nil)
+        let directReceipt = try restored.archiveReceived([], stored: [direct], moduleID: module)
+        try expect(directReceipt.references.isEmpty, "direct-delivery PDU authorized an invalid slot deletion")
+
+        let cleanup = SMSArchiveCleanup()
+        let generation = cleanup.generation
+        cleanup.enqueue(receipt.references, generation: generation)
+        var deletes = 0
+        let now = Date(timeIntervalSince1970: 100)
+        cleanup.processOne(now: now, inspect: { _ in .unknown }, delete: { _ in deletes += 1 })
+        try expect(deletes == 0, "unreadable PDU was deleted")
+        cleanup.enqueue(receipt.references, generation: generation)
+        cleanup.processOne(now: now.addingTimeInterval(1), inspect: { _ in .exact }, delete: { _ in deletes += 1 })
+        try expect(deletes == 0, "repeated polling bypassed cleanup retry backoff")
+        cleanup.processOne(now: now.addingTimeInterval(31), inspect: { _ in .gone }, delete: { _ in deletes += 1 })
+        try expect(deletes == 0, "recycled index was deleted")
+        cleanup.enqueue(receipt.references, generation: generation)
+        cleanup.processOne(now: now.addingTimeInterval(62), inspect: { _ in .exact }, delete: { _ in deletes += 1 })
+        try expect(deletes == 1, "verified archived PDU was not deleted")
+        cleanup.processOne(now: now.addingTimeInterval(63), inspect: { _ in .exact }, delete: { _ in deletes += 1 })
+        try expect(deletes == 1, "ambiguous deletion retried without backoff")
+        cleanup.reset()
+        cleanup.enqueue(receipt.references, generation: generation)
+        cleanup.processOne(now: now.addingTimeInterval(100), inspect: { _ in .exact }, delete: { _ in deletes += 1 })
+        try expect(deletes == 1, "pre-disconnect receipt authorized deletion in new session")
+        cleanup.enqueue(receipt.references, generation: cleanup.generation)
+        cleanup.processOne(now: now.addingTimeInterval(101), inspect: { _ in
+            cleanup.reset()
+            return .exact
+        }, delete: { _ in deletes += 1 })
+        try expect(deletes == 1, "disconnect during CMGR did not cancel deletion")
+    }
+
     try expect(
         AppLanguage.preferredSystemLanguage(from: ["zh-Hans-CN"]) == .simplifiedChinese &&
             AppLanguage.preferredSystemLanguage(from: ["en-US"]) == .english &&

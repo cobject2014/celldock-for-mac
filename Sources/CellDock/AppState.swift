@@ -596,10 +596,11 @@ final class AppState: ObservableObject {
             self.automaticallyRestoreCellularOnStartupIfNeeded()
             self.automaticallyPrioritizeCellularIfNeeded()
         }
-        modemService.onMessages = { [weak self] incoming, isInitialSync in
-            guard let self else { return }
-            self.handleIncomingMessages(
+        modemService.onMessages = { [weak self] incoming, stored, isInitialSync in
+            guard let self else { return [] }
+            return self.handleIncomingMessages(
                 incoming,
+                stored: stored,
                 moduleID: self.activeCommunicationModuleID,
                 isInitialSync: isInitialSync
             )
@@ -919,12 +920,13 @@ final class AppState: ObservableObject {
                 self.messages = self.messageStore.messages
             }
         }
-        service.onMessages = { [weak self] incoming, isInitialSync in
-            self?.handleIncomingMessages(
+        service.onMessages = { [weak self] incoming, stored, isInitialSync in
+            return self?.handleIncomingMessages(
                 incoming,
+                stored: stored,
                 moduleID: id,
                 isInitialSync: isInitialSync
-            )
+            ) ?? []
         }
         service.onCallSnapshot = { [weak self] snapshot in
             self?.handleCallSnapshot(snapshot, moduleID: id)
@@ -933,15 +935,20 @@ final class AppState: ObservableObject {
 
     private func handleIncomingMessages(
         _ incoming: [SMSMessage],
+        stored: [ModemStoredPDU],
         moduleID: CellularModuleID,
         isInitialSync: Bool
-    ) {
-        let taggedMessages = incoming.map { message in
-            var tagged = message
-            tagged.assignModule(moduleID)
-            return tagged
+    ) -> [ModemPDUReference] {
+        let receipt: (newMessages: [SMSMessage], references: [ModemPDUReference])
+        do {
+            receipt = try messageStore.archiveReceived(incoming, stored: stored, moduleID: moduleID)
+        } catch {
+            // No acknowledgement, notification or forwarding on failed writes.
+            // The next modem poll retries; its original copy remains untouched.
+            NSLog("CellDock: SMS archive write failed; modem cleanup withheld: %@", error.localizedDescription)
+            return []
         }
-        let newMessages = messageStore.merge(taggedMessages)
+        let newMessages = receipt.newMessages
         if autoDeleteReadVerificationMessages {
             messageStore.fillMissingVerificationReadDates()
         }
@@ -950,7 +957,7 @@ final class AppState: ObservableObject {
             messages = updatedMessages
             scheduleVerificationAutoDelete()
         }
-        guard !isInitialSync else { return }
+        guard !isInitialSync else { return receipt.references }
         for message in newMessages {
             alertSounds.playMessageAlert()
             NotificationService.shared.postNewMessage(
@@ -962,6 +969,7 @@ final class AppState: ObservableObject {
                 SMSForwardingService.shared.forward(message)
             }
         }
+        return receipt.references
     }
 
     private func handleCallSnapshot(

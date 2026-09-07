@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 @MainActor
 final class MessageStore: ObservableObject {
@@ -10,8 +11,8 @@ final class MessageStore: ObservableObject {
     private let decoder: JSONDecoder
     private var deletedMessages: DeletedMessageRegistry
 
-    init(fileManager: FileManager = .default) {
-        let directory = AppDataDirectory.userApplicationSupport(fileManager: fileManager)
+    init(fileManager: FileManager = .default, directory: URL? = nil) {
+        let directory = directory ?? AppDataDirectory.userApplicationSupport(fileManager: fileManager)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("messages.json")
         backupURL = directory.appendingPathComponent("messages.backup.json")
@@ -29,6 +30,39 @@ final class MessageStore: ObservableObject {
 
     var unreadCount: Int {
         messages.lazy.filter { !$0.isRead }.count
+    }
+
+    @discardableResult
+    func mergeDurably(_ incoming: [SMSMessage]) throws -> [SMSMessage] {
+        let visibleIncoming = incoming.filter { !deletedMessages.contains($0.id) }
+        let result = SMSMessageMerger.merge(existing: messages, incoming: visibleIncoming)
+        // Retry even when memory is unchanged: an earlier write may have failed.
+        // Never publish or authorize modem cleanup before the write succeeds.
+        try persist(result.messages)
+        messages = result.messages
+        return result.newlyDiscovered
+    }
+
+    func archiveReceived(
+        _ incoming: [SMSMessage],
+        stored: [ModemStoredPDU],
+        moduleID: CellularModuleID
+    ) throws -> (newMessages: [SMSMessage], references: [ModemPDUReference]) {
+        let tagged = incoming.map { message -> SMSMessage in
+            var tagged = message
+            tagged.assignModule(moduleID)
+            return tagged
+        }
+        let discovered = try mergeDurably(tagged)
+        // Also recognize surviving fragments of an already archived long SMS
+        // after a partial cleanup/restart. Incomplete, unknown and tombstoned
+        // messages are not candidates. Never authorize from another module.
+        let archivedPDUs = Set(messages.filter {
+            $0.moduleID == moduleID && !$0.isOutgoing
+        }.flatMap(\.rawPDUs).map { $0.uppercased() })
+        let references = stored.compactMap(ModemPDUReference.init(storedPDU:))
+            .filter { archivedPDUs.contains($0.rawPDU) }
+        return (discovered, references)
     }
 
     @discardableResult
@@ -190,13 +224,20 @@ final class MessageStore: ObservableObject {
     }
 
     private func save() {
-        guard let data = try? encoder.encode(messages) else { return }
+        try? persist(messages)
+    }
+
+    private func persist(_ snapshot: [SMSMessage]) throws {
+        let data = try encoder.encode(snapshot)
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: fileURL.path), decodeMessages(at: fileURL) != nil {
             try? fileManager.removeItem(at: backupURL)
             try? fileManager.copyItem(at: fileURL, to: backupURL)
         }
-        try? data.write(to: fileURL, options: .atomic)
+        try data.write(to: fileURL, options: .atomic)
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer { try? handle.close() }
+        try handle.synchronize()
     }
 
     private func decodeMessages(at url: URL) -> [SMSMessage]? {

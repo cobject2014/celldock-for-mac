@@ -46,7 +46,7 @@ func celldockModemStreamCallback(
 
 final class ModemService {
     var onSnapshot: ((ModemSnapshot) -> Void)?
-    var onMessages: (([SMSMessage], Bool) -> Void)?
+    var onMessages: (([SMSMessage], [ModemStoredPDU], Bool) -> [ModemPDUReference])?
     var onCallSnapshot: ((CallSnapshot) -> Void)?
 
     private struct PendingMessageLocation {
@@ -125,6 +125,7 @@ final class ModemService {
     private var inFlightMessageLocations: Set<ModemMessageLocation> = []
     private var urcFramer = ModemURCStreamFramer()
     private var bufferedSMSAssembler = BufferedSMSAssembler()
+    private let archivedSMSCleanup = SMSArchiveCleanup()
     private var messageStorageSyncTracker = MessageStorageSyncTracker()
     private var callSnapshot = CallSnapshot()
     private var callURCFramer = CallURCStreamFramer()
@@ -2643,6 +2644,7 @@ final class ModemService {
             needsImmediateMessagePoll = false
             pollMessages()
         }
+        cleanOneArchivedSMS()
     }
 
     private func recoverExistingCallBeforeInitialization() -> Bool {
@@ -3149,7 +3151,7 @@ final class ModemService {
             }
             let messages = bufferedSMSAssembler.ingest(stored)
             let isInitialStorageSync = messageStorageSyncTracker.markSuccessfulPoll(of: storage)
-            publishMessages(messages, isInitial: isInitialStorageSync)
+            publishMessages(messages, stored: stored, isInitial: isInitialStorageSync)
         }
         if let originalStorage { _ = selectMessageStorage(originalStorage) }
     }
@@ -3200,7 +3202,7 @@ final class ModemService {
             ModemStoredPDU(index: -1, status: 0, declaredLength: nil, rawPDU: $0, storage: nil)
         }
         let messages = bufferedSMSAssembler.ingest(stored)
-        publishMessages(messages, isInitial: false)
+        publishMessages(messages, stored: stored, isInitial: false)
     }
 
     fileprivate func consumeCommandStreamBytes(
@@ -3347,7 +3349,7 @@ final class ModemService {
                 rawPDU: pdu,
                 storage: location.storage
             )
-            publishMessages(bufferedSMSAssembler.ingest([stored]), isInitial: false)
+            publishMessages(bufferedSMSAssembler.ingest([stored]), stored: [stored], isInitial: false)
         }
         if let originalStorage { _ = selectMessageStorage(originalStorage) }
         needsImmediateMessagePoll = true
@@ -3401,6 +3403,7 @@ final class ModemService {
     }
 
     private func resetSMSConnectionState() {
+        archivedSMSCleanup.reset()
         currentMessageStorage = nil
         readableMessageStorages.removeAll()
         observedMessageStorages.removeAll()
@@ -3454,10 +3457,39 @@ final class ModemService {
         return true
     }
 
-    private func publishMessages(_ messages: [SMSMessage], isInitial: Bool) {
-        guard !messages.isEmpty else { return }
+    private func cleanOneArchivedSMS() {
+        guard isOpen, !callSnapshot.hasCall, !callActionInFlight,
+              !hasPendingMediaCleanup else { return }
+        let originalStorage = currentMessageStorage
+        defer {
+            if isOpen, let originalStorage { _ = selectMessageStorage(originalStorage) }
+        }
+        archivedSMSCleanup.processOne(inspect: { reference in
+            guard self.selectMessageStorage(reference.storage) else { return .unknown }
+            switch self.inspectExpectedPDU(index: reference.index, expectedPDU: reference.rawPDU) {
+            case .exact: return .exact
+            case .gone: return .gone
+            case .unknown: return .unknown
+            }
+        }, delete: { reference in
+            guard self.isOpen, !self.callSnapshot.hasCall, !self.callActionInFlight else { return }
+            // Only the just-read slot; never use CMGD's bulk-delete flags.
+            let result = self.command("AT+CMGD=\(reference.index),0", timeout: 3_000)
+            if !result.isSuccess {
+                NSLog("CellDock: archived SMS cleanup not confirmed; will re-read before retry")
+            }
+        })
+    }
+
+    private func publishMessages(_ messages: [SMSMessage], stored: [ModemStoredPDU], isInitial: Bool) {
+        guard !messages.isEmpty || !stored.isEmpty else { return }
+        let generation = archivedSMSCleanup.generation
         DispatchQueue.main.async { [weak self] in
-            self?.onMessages?(messages, isInitial)
+            guard let self else { return }
+            let references = self.onMessages?(messages, stored, isInitial) ?? []
+            self.queue.async { [weak self] in
+                self?.archivedSMSCleanup.enqueue(references, generation: generation)
+            }
         }
     }
 
