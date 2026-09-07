@@ -1684,3 +1684,14 @@
 "配置飞书机器人" = "Configure Feishu Bot";
 "钉钉" = "DingTalk";
 "飞书" = "Feishu";
+/* WeCom group robot forwarding */
+"企业微信（Webhook）" = "WeCom (Webhook)";
+"填写完整 Webhook 地址，转发到企业微信群机器人" = "Forward to a WeCom group bot using its full Webhook URL";
+"配置企业微信群机器人" = "Configure WeCom group bot";
+"从企业微信群机器人复制完整地址，包含 key；地址安全保存在钥匙串中。" = "Copy the full URL including key from your WeCom group bot. It is stored securely in Keychain.";
+"启用后，新收到的短信号码、时间和正文（含验证码）将发送到该群。" = "When enabled, new SMS sender numbers, times and contents (including verification codes) are sent to this group.";
+"请填写完整的企业微信群机器人 HTTPS Webhook 地址（包含 key）。" = "Enter the full HTTPS Webhook URL of your WeCom group bot, including key.";
+"企业微信返回了无效响应，无法确认发送成功。" = "WeCom returned an invalid response; delivery could not be confirmed.";
+"转发文本超过企业微信的 2048 字节限制，未发送；完整短信仍保存在本机。" = "The text exceeds WeCom’s 2048-byte limit and was not sent. The full SMS remains on this Mac.";
+"企业微信拒绝发送（错误码 %d），请检查机器人地址或发送频率。" = "WeCom rejected the message (error %d). Check the bot URL or sending rate.";
+"企业微信连接失败（错误码 %d）。" = "WeCom connection failed (error %d).";

@@ -2,6 +2,8 @@ import SwiftUI
 
 private struct ForwardingTestButton: View {
     let channel: SMSForwardChannel
+    var action: (() async -> Result<Void, Error>)? = nil
+    var isConfigured = true
     @State private var isSending = false
     @State private var resultMessage: String?
     @State private var resultIsSuccess = false
@@ -18,7 +20,7 @@ private struct ForwardingTestButton: View {
                 }
             }
             .adaptiveGlassButton()
-            .disabled(isSending)
+            .disabled(isSending || !isConfigured)
 
             if let resultMessage {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -37,7 +39,9 @@ private struct ForwardingTestButton: View {
         isSending = true
         resultMessage = nil
         Task {
-            let result = await SMSForwardingService.shared.sendTest(channel)
+            let result: Result<Void, Error>
+            if let action { result = await action() }
+            else { result = await SMSForwardingService.shared.sendTest(channel) }
             await MainActor.run {
                 isSending = false
                 switch result {
@@ -55,9 +59,11 @@ private struct ForwardingTestButton: View {
 
 private struct ForwardingSheetChrome<Content: View>: View {
     let title: String
-    let onSave: () -> Void
+    var canSave = true
+    let onSave: () throws -> Void
     @ViewBuilder let content: () -> Content
     @Environment(\.dismiss) private var dismiss
+    @State private var saveError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -66,20 +72,60 @@ private struct ForwardingSheetChrome<Content: View>: View {
 
             content()
 
+            if let saveError {
+                Text(saveError).font(.caption).foregroundStyle(.red)
+            }
+
             Spacer(minLength: 0)
 
             HStack {
                 Spacer()
                 Button(L10n.tr("取消")) { dismiss() }
                 Button(L10n.tr("保存")) {
-                    onSave()
-                    dismiss()
+                    do {
+                        try onSave()
+                        dismiss()
+                    } catch { saveError = error.localizedDescription }
                 }
+                .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
         .frame(width: 420, height: 320)
+    }
+}
+
+struct WeComForwardingConfigSheet: View {
+    @ObservedObject var store: SMSForwardingStore
+    @State private var webhookURL: String
+
+    init(store: SMSForwardingStore) {
+        self.store = store
+        _webhookURL = State(initialValue: store.wecom.webhookURL)
+    }
+
+    private var configuration: WeComForwardingConfiguration {
+        WeComForwardingConfiguration(webhookURL: webhookURL)
+    }
+
+    var body: some View {
+        ForwardingSheetChrome(title: L10n.tr("配置企业微信群机器人"), canSave: configuration.isConfigured) {
+            try store.saveWeCom(configuration)
+        } content: {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.tr("Webhook 地址")).font(.caption).foregroundStyle(.secondary)
+                SecureField("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...", text: $webhookURL)
+                    .textFieldStyle(.roundedBorder)
+                Text(L10n.tr("从企业微信群机器人复制完整地址，包含 key；地址安全保存在钥匙串中。"))
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text(L10n.tr("启用后，新收到的短信号码、时间和正文（含验证码）将发送到该群。"))
+                    .font(.caption2).foregroundStyle(.secondary)
+                ForwardingTestButton(channel: .wecom, action: {
+                    await SMSForwardingService.shared.sendWeComTest(configuration)
+                }, isConfigured: configuration.isConfigured)
+            }
+        }
     }
 }
 

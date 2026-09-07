@@ -1,13 +1,14 @@
 import Foundation
 
 /// Forwards incoming SMS messages to third-party push/webhook channels
-/// (Bark, Feishu custom bot, DingTalk custom bot). Reads its configuration
+/// (Bark, Feishu, DingTalk and WeCom group bots). Reads its configuration
 /// snapshot from `SMSForwardingStore` on the main actor, then performs the
 /// actual network calls off the main actor.
 final class SMSForwardingService {
     static let shared = SMSForwardingService()
 
     private let session: URLSession
+    private let wecomSession = URLSession(configuration: .ephemeral)
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -24,6 +25,7 @@ final class SMSForwardingService {
         let bark = store.bark
         let feishu = store.feishu
         let dingtalk = store.dingtalk
+        let wecom = store.wecom
 
         for channel in channels {
             Task {
@@ -33,7 +35,8 @@ final class SMSForwardingService {
                     channel: channel,
                     bark: bark,
                     feishu: feishu,
-                    dingtalk: dingtalk
+                    dingtalk: dingtalk,
+                    wecom: wecom
                 )
                 let forwardResult: SMSForwardResult
                 switch result {
@@ -51,9 +54,9 @@ final class SMSForwardingService {
 
     /// Used by the settings UI's "发送测试" button.
     func sendTest(_ channel: SMSForwardChannel) async -> Result<Void, Error> {
-        let (bark, feishu, dingtalk) = await MainActor.run {
+        let (bark, feishu, dingtalk, wecom) = await MainActor.run {
             let store = SMSForwardingStore.shared
-            return (store.bark, store.feishu, store.dingtalk)
+            return (store.bark, store.feishu, store.dingtalk, store.wecom)
         }
         return await send(
             title: L10n.tr("[CellDock] 测试推送"),
@@ -61,7 +64,8 @@ final class SMSForwardingService {
             channel: channel,
             bark: bark,
             feishu: feishu,
-            dingtalk: dingtalk
+            dingtalk: dingtalk,
+            wecom: wecom
         )
     }
 
@@ -82,7 +86,8 @@ final class SMSForwardingService {
         channel: SMSForwardChannel,
         bark: BarkForwardingConfiguration,
         feishu: FeishuForwardingConfiguration,
-        dingtalk: DingTalkForwardingConfiguration
+        dingtalk: DingTalkForwardingConfiguration,
+        wecom: WeComForwardingConfiguration
     ) async -> Result<Void, Error> {
         do {
             switch channel {
@@ -92,6 +97,9 @@ final class SMSForwardingService {
                 try await sendFeishu(text: "\(title)\n\(text)", configuration: feishu)
             case .dingtalk:
                 try await sendDingTalk(text: "\(title)\n\(text)", configuration: dingtalk)
+            case .wecom:
+                try await WeComWebhook.send(webhookURL: wecom.webhookURL,
+                    text: "\(title)\n\(text)", session: wecomSession)
             }
             return .success(())
         } catch {
@@ -100,6 +108,16 @@ final class SMSForwardingService {
     }
 
     // MARK: - Bark
+
+    /// Test exactly what is currently typed, without saving or enabling forwarding.
+    func sendWeComTest(_ configuration: WeComForwardingConfiguration) async -> Result<Void, Error> {
+        do {
+            try await WeComWebhook.send(webhookURL: configuration.webhookURL,
+                text: L10n.tr("[CellDock] 测试推送") + "\n" + L10n.tr("这是一条来自 CellDock 短信转发功能的测试消息。"),
+                session: wecomSession)
+            return .success(())
+        } catch { return .failure(error) }
+    }
 
     private func sendBark(
         title: String,

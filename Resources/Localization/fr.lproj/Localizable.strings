@@ -1681,3 +1681,14 @@
 "配置飞书机器人" = "Configurer le bot Feishu";
 "钉钉" = "DingTalk";
 "飞书" = "Feishu";
+/* WeCom group robot forwarding */
+"企业微信（Webhook）" = "WeCom (Webhook)";
+"填写完整 Webhook 地址，转发到企业微信群机器人" = "Transférer vers un robot de groupe WeCom via son URL Webhook complète";
+"配置企业微信群机器人" = "Configurer le robot de groupe WeCom";
+"从企业微信群机器人复制完整地址，包含 key；地址安全保存在钥匙串中。" = "Copiez l’URL complète avec key depuis le robot WeCom. Elle est stockée dans le trousseau.";
+"启用后，新收到的短信号码、时间和正文（含验证码）将发送到该群。" = "Une fois activé, les numéros, heures et textes des nouveaux SMS (codes de vérification inclus) sont envoyés à ce groupe.";
+"请填写完整的企业微信群机器人 HTTPS Webhook 地址（包含 key）。" = "Saisissez l’URL HTTPS Webhook complète du robot WeCom, avec key.";
+"企业微信返回了无效响应，无法确认发送成功。" = "Réponse WeCom invalide ; impossible de confirmer l’envoi.";
+"转发文本超过企业微信的 2048 字节限制，未发送；完整短信仍保存在本机。" = "Le texte dépasse la limite WeCom de 2048 octets et n’a pas été envoyé. Le SMS complet reste sur ce Mac.";
+"企业微信拒绝发送（错误码 %d），请检查机器人地址或发送频率。" = "WeCom a refusé le message (erreur %d). Vérifiez l’URL du robot ou la fréquence d’envoi.";
+"企业微信连接失败（错误码 %d）。" = "Connexion WeCom échouée (erreur %d).";

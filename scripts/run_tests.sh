@@ -112,6 +112,8 @@ swiftc \
 swiftc \
   -swift-version 5 \
   "$ROOT/Sources/CellDock/SMSForwardingSigning.swift" \
+  "$ROOT/Sources/CellDock/AppLanguage.swift" \
+  "$ROOT/Sources/CellDock/WeComWebhook.swift" \
   "$ROOT/Tests/SMSForwardingSelfTests/main.swift" \
   -o "$ROOT/.build/self-tests/SMSForwardingSelfTests"
 

@@ -11,6 +11,7 @@ struct SMSForwardingCredentialStore {
         case feishuSecret = "feishu.secret"
         case dingtalkAccessToken = "dingtalk.accessToken"
         case dingtalkSecret = "dingtalk.secret"
+        case wecomWebhookURL = "wecom.webhookURL"
     }
 
     private let service = "app.celldock.mac.sms-forwarding"

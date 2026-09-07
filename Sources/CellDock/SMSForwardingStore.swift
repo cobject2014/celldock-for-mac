@@ -31,6 +31,7 @@ final class SMSForwardingStore: ObservableObject {
     @Published private(set) var bark = BarkForwardingConfiguration()
     @Published private(set) var feishu = FeishuForwardingConfiguration()
     @Published private(set) var dingtalk = DingTalkForwardingConfiguration()
+    @Published private(set) var wecom = WeComForwardingConfiguration()
 
     private let defaults: UserDefaults
     private let credentialStore: SMSForwardingCredentialStore
@@ -52,6 +53,7 @@ final class SMSForwardingStore: ObservableObject {
         feishu.secret = ((try? credentialStore.value(for: .feishuSecret)) ?? nil) ?? ""
         dingtalk.accessToken = ((try? credentialStore.value(for: .dingtalkAccessToken)) ?? nil) ?? ""
         dingtalk.secret = ((try? credentialStore.value(for: .dingtalkSecret)) ?? nil) ?? ""
+        wecom.webhookURL = ((try? credentialStore.value(for: .wecomWebhookURL)) ?? nil) ?? ""
     }
 
     func isEnabled(_ channel: SMSForwardChannel) -> Bool {
@@ -86,6 +88,12 @@ final class SMSForwardingStore: ObservableObject {
 
     func recordResult(_ result: SMSForwardResult, for channel: SMSForwardChannel) {
         lastResults[channel] = result
+    }
+
+    func saveWeCom(_ configuration: WeComForwardingConfiguration) throws {
+        let url = try WeComWebhook.endpoint(configuration.webhookURL)
+        try credentialStore.setValue(url.absoluteString, for: .wecomWebhookURL)
+        wecom = WeComForwardingConfiguration(webhookURL: url.absoluteString)
     }
 
     private func persistSettings() {

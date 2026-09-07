@@ -4,6 +4,7 @@ enum SMSForwardChannel: String, CaseIterable, Codable, Identifiable {
     case bark
     case feishu
     case dingtalk
+    case wecom
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum SMSForwardChannel: String, CaseIterable, Codable, Identifiable {
         case .bark: return L10n.tr("Bark")
         case .feishu: return L10n.tr("飞书")
         case .dingtalk: return L10n.tr("钉钉")
+        case .wecom: return L10n.tr("企业微信（Webhook）")
         }
     }
 
@@ -20,6 +22,7 @@ enum SMSForwardChannel: String, CaseIterable, Codable, Identifiable {
         case .bark: return L10n.tr("推送到 Bark App（iOS）")
         case .feishu: return L10n.tr("发送到飞书自定义机器人群")
         case .dingtalk: return L10n.tr("发送到钉钉自定义机器人群")
+        case .wecom: return L10n.tr("填写完整 Webhook 地址，转发到企业微信群机器人")
         }
     }
 }

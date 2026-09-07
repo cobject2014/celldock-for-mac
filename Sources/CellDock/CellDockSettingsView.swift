@@ -128,6 +128,8 @@ struct CellDockSettingsView: View {
             FeishuForwardingConfigSheet(store: smsForwarding)
         case .dingtalk:
             DingTalkForwardingConfigSheet(store: smsForwarding)
+        case .wecom:
+            WeComForwardingConfigSheet(store: smsForwarding)
         }
     }
 
