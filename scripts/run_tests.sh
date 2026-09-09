@@ -13,6 +13,7 @@ for language in zh-Hans en ja fr; do
   plutil -lint "$localization_dir/InfoPlist.strings" >/dev/null
 done
 "$ROOT/scripts/check_localizations.py"
+xcrun swift "$ROOT/Tests/CallIslandResizeSelfTests.swift"
 
 xcrun swift "$ROOT/scripts/build_module_voice_payload.swift" \
   "$ROOT/Resources/ModuleVoice" \

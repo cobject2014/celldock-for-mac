@@ -57,7 +57,7 @@ final class CallIslandWindowController: NSObject, NSWindowDelegate {
             presentation.isExpanded = false
         }
         ensurePanel(appState: appState)
-        updatePanelSize(animated: panel?.isVisible == true)
+        updatePanelSize()
         panel?.orderFrontRegardless()
     }
 
@@ -73,7 +73,7 @@ final class CallIslandWindowController: NSObject, NSWindowDelegate {
             appState: appState,
             presentation: presentation,
             onOpenFullCall: { [weak self] in self?.onOpenFullCall?() },
-            onLayoutChange: { [weak self] in self?.updatePanelSize(animated: true) }
+            onLayoutChange: { [weak self] in self?.updatePanelSize() }
         )
         .cellDockLanguageEnvironment()
 
@@ -112,8 +112,8 @@ final class CallIslandWindowController: NSObject, NSWindowDelegate {
         restoreOrPosition(panel)
     }
 
-    private func updatePanelSize(animated: Bool) {
-        guard let appState, let panel else { return }
+    private func updatePanelSize() {
+        guard !isAdjustingFrame, let appState, let panel else { return }
         let targetSize = CallIslandView.contentSize(
             for: appState.call.phase,
             isExpanded: presentation.isExpanded
@@ -128,8 +128,12 @@ final class CallIslandWindowController: NSObject, NSWindowDelegate {
             height: targetSize.height
         ))
         isAdjustingFrame = true
-        panel.setFrame(targetFrame, display: true, animate: animated)
-        isAdjustingFrame = false
+        defer { isAdjustingFrame = false }
+        // AppKit's synchronous resize animation pumps a nested run loop. A
+        // SwiftUI phase/layout callback can then resize this panel again while
+        // UpdateCycle is still processing the first transition (SIGSEGV).
+        // Commit the window frame directly; keep animation inside SwiftUI.
+        panel.setFrame(targetFrame, display: true, animate: false)
     }
 
     private func restoreOrPosition(_ panel: NSPanel) {
