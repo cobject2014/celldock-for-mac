@@ -1692,3 +1692,6 @@
 "转发文本超过企业微信的 2048 字节限制，未发送；完整短信仍保存在本机。" = "Le texte dépasse la limite WeCom de 2048 octets et n’a pas été envoyé. Le SMS complet reste sur ce Mac.";
 "企业微信拒绝发送（错误码 %d），请检查机器人地址或发送频率。" = "WeCom a refusé le message (erreur %d). Vérifiez l’URL du robot ou la fréquence d’envoi.";
 "企业微信连接失败（错误码 %d）。" = "Connexion WeCom échouée (erreur %d).";
+"来自：%@\n接收：%@（%@）\n时间：%@\n内容：%@" = "Expéditeur : %@\nDestinataire : %@ (%@)\nHeure : %@\nMessage : %@";
+"号码未知" = "Numéro inconnu";
+"模组未知" = "Module inconnu";

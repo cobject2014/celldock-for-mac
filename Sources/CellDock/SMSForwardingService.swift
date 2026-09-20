@@ -16,9 +16,9 @@ final class SMSForwardingService {
 
     /// Fire-and-forget entry point called for every newly-received SMS.
     @MainActor
-    func forward(_ message: SMSMessage) {
+    func forward(_ message: SMSMessage, recipients: [SMSForwardingRecipient]) {
         let store = SMSForwardingStore.shared
-        let text = Self.formattedText(for: message)
+        let text = SMSForwardingText.format(message, recipients: recipients)
         let channels = store.enabledChannels
         guard !channels.isEmpty else { return }
 
@@ -66,17 +66,6 @@ final class SMSForwardingService {
             feishu: feishu,
             dingtalk: dingtalk,
             wecom: wecom
-        )
-    }
-
-    static func formattedText(for message: SMSMessage) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return L10n.tr(
-            "来自：%@\n时间：%@\n内容：%@",
-            message.sender,
-            formatter.string(from: message.timestamp),
-            message.body
         )
     }
 

@@ -54,6 +54,7 @@ swiftc \
   "$ROOT/Sources/CellDock/DeletedMessageRegistry.swift" \
   "$ROOT/Sources/CellDock/MessageStore.swift" \
   "$ROOT/Sources/CellDock/SMSArchiveCleanup.swift" \
+  "$ROOT/Sources/CellDock/SMSForwardingText.swift" \
   "$ROOT/Sources/CellDock/EUICCModels.swift" \
   "$ROOT/Sources/CellDock/ATResponseParser.swift" \
   "$ROOT/Sources/CellDock/SMSPDUDecoder.swift" \

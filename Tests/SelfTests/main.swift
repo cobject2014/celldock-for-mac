@@ -21,6 +21,33 @@ func expectDecodeFailure(_ pdu: String, _ message: String) throws {
 }
 
 do {
+    let recipientA = CellularModuleID(rawValue: "usb-a")
+    let recipientB = CellularModuleID(rawValue: "usb-b")
+    let recipients = [
+        SMSForwardingRecipient(moduleID: recipientA, name: "Module A", phoneNumber: "111111"),
+        SMSForwardingRecipient(moduleID: recipientB, name: "Module B", phoneNumber: " 222222 \n")
+    ]
+    var forwardedMessage = SMSMessage(
+        id: "forward-test", moduleID: recipientB, modemIndices: [], sender: "10010",
+        body: "hello\nworld", timestamp: Date(timeIntervalSince1970: 0), rawPDUs: [],
+        isRead: false, firstSeenAt: Date(timeIntervalSince1970: 0)
+    )
+    let forwarded = SMSForwardingText.format(forwardedMessage, recipients: recipients)
+    try expect(forwarded.contains("222222（Module B）"), "forwarding omitted receiving module number")
+    try expect(!forwarded.contains("111111"), "forwarding used another module's number")
+    try expect(forwarded.contains("10010") && forwarded.contains("hello\nworld"), "forwarding lost original SMS")
+    for number: String? in [nil, "", " \n"] {
+        let text = SMSForwardingText.format(forwardedMessage, recipients: [
+            SMSForwardingRecipient(moduleID: recipientB, name: "Module B", phoneNumber: number)
+        ])
+        try expect(text.contains("Module B") && text.contains(L10n.tr("号码未知")), "unknown number lost module identity")
+    }
+    let detached = SMSForwardingText.format(forwardedMessage, recipients: [recipients[0]])
+    try expect(detached.contains("usb-b") && !detached.contains("111111"), "detached module fell back to another SIM")
+    forwardedMessage.moduleID = nil
+    let legacy = SMSForwardingText.format(forwardedMessage, recipients: recipients)
+    try expect(!legacy.contains("111111") && !legacy.contains("222222"), "legacy SMS guessed a receiving SIM")
+
     try MainActor.assumeIsolated {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CellDock-archive-tests-\(UUID().uuidString)")

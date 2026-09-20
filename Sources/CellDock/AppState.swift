@@ -966,7 +966,13 @@ final class AppState: ObservableObject {
                 presentation: privacyPresentation
             )
             if !message.isOutgoing {
-                SMSForwardingService.shared.forward(message)
+                SMSForwardingService.shared.forward(message, recipients: cellularModules.map {
+                    SMSForwardingRecipient(
+                        moduleID: $0.id,
+                        name: $0.localizedDisplayName,
+                        phoneNumber: $0.modem.simPhoneNumber
+                    )
+                })
             }
         }
         return receipt.references
