@@ -24,6 +24,7 @@ final class VoiceAudioService {
     private var voice: OpaquePointer?
     private var activeUAC: OpaquePointer?
     private var engine: AVAudioEngine?
+    private var microphoneTapInstalled = false
     private var player: AVAudioPlayerNode?
     private var running = false
     private var mediaEnabled = false
@@ -81,6 +82,7 @@ final class VoiceAudioService {
 
     func start(
         matchingLocationID: UInt32,
+        listenOnly: Bool = false,
         completion: @escaping (ModemActionResult) -> Void
     ) {
         guard matchingLocationID != 0 else {
@@ -131,7 +133,7 @@ final class VoiceAudioService {
 
             let voiceProcessingEnabled: Bool
             do {
-                voiceProcessingEnabled = try self.startAudioEngine(session: session)
+                voiceProcessingEnabled = try self.startAudioEngine(session: session, listenOnly: listenOnly)
             } catch {
                 celldock_voice_destroy(voice)
                 DispatchQueue.main.async {
@@ -155,7 +157,7 @@ final class VoiceAudioService {
                 self.voice = voice
                 self.running = true
                 self.mediaEnabled = false
-                self.muted = false
+                self.muted = listenOnly
             }
             self.resetBuffers()
             let description = L10n.tr(
@@ -258,6 +260,7 @@ final class VoiceAudioService {
         productID: UInt16,
         matchingLocationID: UInt32,
         preferredUID: String? = nil,
+        listenOnly: Bool = false,
         completion: @escaping (ModemActionResult) -> Void
     ) {
         guard vendorID != 0, productID != 0, matchingLocationID != 0 else {
@@ -332,7 +335,7 @@ final class VoiceAudioService {
 
             self.resetBuffersSynchronously()
             do {
-                voiceProcessingEnabled = try self.startAudioEngine(session: session)
+                voiceProcessingEnabled = try self.startAudioEngine(session: session, listenOnly: listenOnly)
                 audioEngineStarted = true
             } catch {
                 failStart(L10n.error("无法启动 Mac 麦克风/扬声器：%@", underlying: error))
@@ -360,7 +363,7 @@ final class VoiceAudioService {
             self.stateLock.withLock {
                 self.running = true
                 self.mediaEnabled = false
-                self.muted = false
+                self.muted = listenOnly
                 self.activeUAC = uac
             }
             let uacName: String
@@ -480,7 +483,7 @@ final class VoiceAudioService {
         )
     }
 
-    private func startAudioEngine(session: UInt64) throws -> Bool {
+    private func startAudioEngine(session: UInt64, listenOnly: Bool) throws -> Bool {
         try playbackQueue.sync {
             scheduledPlaybackFrames = 0
             let engine = AVAudioEngine()
@@ -491,6 +494,18 @@ final class VoiceAudioService {
             )!
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+
+            if listenOnly {
+                // Never access inputNode or install a microphone tap in this
+                // mode. The transport sends silence while downlink stays live.
+                engine.prepare()
+                try engine.start()
+                player.play()
+                self.engine = engine
+                self.player = player
+                self.microphoneTapInstalled = false
+                return false
+            }
 
             let input = engine.inputNode
             let voiceProcessingEnabled: Bool
@@ -521,6 +536,7 @@ final class VoiceAudioService {
             player.play()
             self.engine = engine
             self.player = player
+            self.microphoneTapInstalled = true
             return voiceProcessingEnabled
         }
     }
@@ -528,12 +544,13 @@ final class VoiceAudioService {
     private func stopAudioEngine() {
         playbackQueue.sync {
             if let engine {
-                engine.inputNode.removeTap(onBus: 0)
+                if microphoneTapInstalled { engine.inputNode.removeTap(onBus: 0) }
                 player?.stop()
                 engine.stop()
             }
             self.player = nil
             self.engine = nil
+            microphoneTapInstalled = false
             scheduledPlaybackFrames = 0
         }
     }

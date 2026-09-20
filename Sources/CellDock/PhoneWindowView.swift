@@ -567,6 +567,11 @@ private struct ActiveCallView: View {
     private func callStage(compact: Bool) -> some View {
         VStack(spacing: compact ? 12 : 17) {
             callStateBadge
+            if appState.isCurrentCallAutomaticallyAnswered {
+                Label(L10n.tr("自动接听 · 仅听"), systemImage: "phone.badge.waveform")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+            }
 
             CallAvatar(
                 title: avatarTitle,
@@ -1106,6 +1111,10 @@ private struct RecentCallsView: View {
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                 HStack(spacing: 5) {
+                                    if record.wasAutomaticallyAnswered == true {
+                                        Text(L10n.tr("自动接听"))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
                                     if let moduleName = moduleName(record) {
                                         Text(moduleName)
                                     }
@@ -1357,6 +1366,11 @@ private struct RecentCallDetailView: View {
     ) -> some View {
         VStack(spacing: compact ? 12 : 16) {
             identityHeader(record, compact: compact)
+            if record.wasAutomaticallyAnswered == true {
+                Label(L10n.tr("自动接听"), systemImage: "phone.badge.waveform")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+            }
 
             Divider()
 
@@ -1501,8 +1515,10 @@ private struct RecentCallDetailView: View {
                     systemImage: "waveform",
                     compact: compact
                 ) {
-                    model.selectedRecordingID = recording.id
                     model.activateFromRail(.recordings)
+                    // A targeted navigation must not be replaced by the rail's "select first" request.
+                    model.consumeListFocusRequest(for: .recordings)
+                    model.selectedRecordingID = recording.id
                 }
             }
         }

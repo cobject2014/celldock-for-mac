@@ -4,6 +4,37 @@ import AVFoundation
 import Foundation
 import UniformTypeIdentifiers
 
+/// Playback-only downmix. The archived recording and its separate tracks are never changed.
+enum CallRecordingPlaybackMix {
+    static func write(source: URL, destination: URL) throws {
+        let input = try AVAudioFile(forReading: source, commonFormat: .pcmFormatFloat32, interleaved: false)
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: input.processingFormat.sampleRate, channels: 1),
+              let sourceBuffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: 8192),
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8192) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        var fileSettings = format.settings
+        fileSettings[AVLinearPCMIsNonInterleaved] = false
+        let output = try AVAudioFile(forWriting: destination, settings: fileSettings,
+                                     commonFormat: .pcmFormatFloat32, interleaved: false)
+        let channelCount = Int(input.processingFormat.channelCount)
+        while input.framePosition < input.length {
+            try input.read(into: sourceBuffer)
+            guard sourceBuffer.frameLength > 0 else { break }
+            outputBuffer.frameLength = sourceBuffer.frameLength
+            guard let sources = sourceBuffer.floatChannelData, let target = outputBuffer.floatChannelData else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            for frame in 0..<Int(sourceBuffer.frameLength) {
+                var mixed: Float = 0
+                for channel in 0..<channelCount { mixed += sources[channel][frame] / Float(channelCount) }
+                target[0][frame] = mixed
+            }
+            try output.write(from: outputBuffer)
+        }
+    }
+}
+
 enum CallRecordingPhase: Equatable {
     case idle
     case recording
@@ -21,6 +52,7 @@ struct CallRecordingRecord: Identifiable, Codable, Equatable {
     let fileName: String
     let isIncomplete: Bool
     var title: String?
+    var wasAutomaticallyAnswered: Bool? = nil
 }
 
 @MainActor
@@ -45,9 +77,11 @@ final class CallRecordingStore: ObservableObject {
         callID: UUID?,
         number: String,
         direction: CallDirection,
-        startedAt: Date
+        startedAt: Date,
+        wasAutomaticallyAnswered: Bool
     )?
     private var player: AVAudioPlayer?
+    private var playbackMixURL: URL?
     private var playbackTimer: Timer?
     private var idleActions: [() -> Void] = []
 
@@ -67,7 +101,8 @@ final class CallRecordingStore: ObservableObject {
         localNumber: String?,
         number: String,
         direction: CallDirection,
-        callID: UUID?
+        callID: UUID?,
+        wasAutomaticallyAnswered: Bool = false
     ) {
         guard phase == .idle else { return }
         lastError = nil
@@ -84,7 +119,7 @@ final class CallRecordingStore: ObservableObject {
                 startedAt: startedAt,
                 outputURL: outputURL
             )
-            activeContext = (id, callID, number, direction, startedAt)
+            activeContext = (id, callID, number, direction, startedAt, wasAutomaticallyAnswered)
             activeRecordingStartedAt = startedAt
             phase = .recording
         } catch {
@@ -119,7 +154,8 @@ final class CallRecordingStore: ObservableObject {
                         duration: capture.duration,
                         fileName: capture.outputURL.lastPathComponent,
                         isIncomplete: capture.isIncomplete,
-                        title: nil
+                        title: nil,
+                        wasAutomaticallyAnswered: context.wasAutomaticallyAnswered
                     )
                     self.records.insert(record, at: 0)
                     self.save()
@@ -169,6 +205,8 @@ final class CallRecordingStore: ObservableObject {
         stopPlaybackTimer()
         player?.stop()
         player = nil
+        if let playbackMixURL { try? FileManager.default.removeItem(at: playbackMixURL) }
+        playbackMixURL = nil
         playingRecordingID = nil
         isPlaybackPlaying = false
         playbackPosition = 0
@@ -257,7 +295,16 @@ final class CallRecordingStore: ObservableObject {
     private func preparePlayback(for record: CallRecordingRecord) throws {
         guard playingRecordingID != record.id || player == nil else { return }
         stopPlayback()
-        let preparedPlayer = try AVAudioPlayer(contentsOf: fileURL(for: record))
+        let mixURL = FileManager.default.temporaryDirectory.appendingPathComponent("CellDock-playback-\(UUID().uuidString).caf")
+        let preparedPlayer: AVAudioPlayer
+        do {
+            try CallRecordingPlaybackMix.write(source: fileURL(for: record), destination: mixURL)
+            preparedPlayer = try AVAudioPlayer(contentsOf: mixURL)
+        } catch {
+            try? FileManager.default.removeItem(at: mixURL)
+            throw error
+        }
+        playbackMixURL = mixURL
         preparedPlayer.enableRate = true
         preparedPlayer.rate = playbackRate
         preparedPlayer.volume = playbackVolume

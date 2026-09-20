@@ -5,8 +5,37 @@ enum SelfTestFailure: Error {
     case failed(String)
 }
 
+final class CallHistoryTestFileManager: FileManager, @unchecked Sendable {
+    let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("CellDock-call-history-\(UUID().uuidString)")
+    override func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+        [testRoot]
+    }
+}
+
 func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
     guard condition() else { throw SelfTestFailure.failed(message) }
+}
+
+try MainActor.assumeIsolated {
+    let files = CallHistoryTestFileManager()
+    defer { try? FileManager.default.removeItem(at: files.testRoot) }
+    let history = CallHistoryStore(fileManager: files)
+    let idle = CallSnapshot(phase: .idle)
+    let ringing = CallSnapshot(phase: .incoming, direction: .incoming, number: "test")
+    let connected = CallSnapshot(phase: .active, direction: .incoming, number: "test")
+    history.consume(previous: idle, current: ringing)
+    history.consume(previous: ringing, current: connected, automaticallyAnswered: true)
+    let completed = history.consume(previous: connected, current: idle)
+    try expect(completed?.wasAutomaticallyAnswered == true, "successful automatic answer lost its marker")
+    let reloaded = CallHistoryStore(fileManager: files)
+    try expect(reloaded.records.first?.wasAutomaticallyAnswered == true, "automatic-answer marker did not survive reload")
+    history.consume(previous: idle, current: ringing)
+    let missed = history.consume(previous: ringing, current: idle, automaticallyAnswered: true)
+    try expect(missed?.wasAutomaticallyAnswered != true, "failed automatic answer was mislabeled as answered")
+    history.consume(previous: idle, current: ringing)
+    history.consume(previous: ringing, current: connected)
+    let manual = history.consume(previous: connected, current: idle)
+    try expect(manual?.wasAutomaticallyAnswered != true, "manual answer inherited automatic marker")
 }
 
 func expectDecodeFailure(_ pdu: String, _ message: String) throws {
@@ -21,6 +50,20 @@ func expectDecodeFailure(_ pdu: String, _ message: String) throws {
 }
 
 do {
+    var answerGate = AutomaticAnswerGate()
+    let ringingID = UUID()
+    try expect(!answerGate.shouldAnswer(callID: ringingID, eligible: true, now: 10, delay: 3), "answered before delay")
+    try expect(!answerGate.shouldAnswer(callID: ringingID, eligible: true, now: 12.9, delay: 3), "answered early")
+    try expect(answerGate.shouldAnswer(callID: ringingID, eligible: true, now: 13, delay: 3), "did not auto answer at deadline")
+    try expect(!answerGate.shouldAnswer(callID: ringingID, eligible: true, now: 20, delay: 3), "retried same auto answer")
+    let cancelledID = UUID()
+    _ = answerGate.shouldAnswer(callID: cancelledID, eligible: true, now: 21, delay: 3)
+    answerGate.suppress(callID: cancelledID)
+    try expect(!answerGate.shouldAnswer(callID: cancelledID, eligible: true, now: 30, delay: 3), "manual rejection did not cancel timer")
+    let nextID = UUID()
+    _ = answerGate.shouldAnswer(callID: nextID, eligible: true, now: 31, delay: 3)
+    try expect(!answerGate.shouldAnswer(callID: nextID, eligible: false, now: 35, delay: 3), "answered ended/disabled call")
+    try expect(!answerGate.shouldAnswer(callID: UUID(), eligible: true, now: 36, delay: 3), "new call inherited old deadline")
     let recipientA = CellularModuleID(rawValue: "usb-a")
     let recipientB = CellularModuleID(rawValue: "usb-b")
     let recipients = [

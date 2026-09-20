@@ -42,6 +42,12 @@ struct RecordingsLibraryView: View {
             renameText = selectedRecording?.title ?? ""
             loadSelectedWaveform()
         }
+        .onChange(of: directionFilter) { _, _ in
+            selectFirstRecordingIfNeeded()
+        }
+        .onChange(of: searchText) { _, _ in
+            selectFirstRecordingIfNeeded()
+        }
         .onChange(of: appState.isPresentationPrivacyEnabled) { _, enabled in
             if enabled {
                 isRenaming = false
@@ -78,7 +84,7 @@ struct RecordingsLibraryView: View {
                 .padding(.bottom, 10)
 
             CommunicationGlassTabs(
-                items: [(0, "全部"), (1, "呼入"), (2, "呼出")],
+                items: [(0, "全部"), (1, "呼入"), (2, "呼出"), (3, "自动接听")],
                 selection: $directionFilter
             )
             .padding(.horizontal, 14)
@@ -133,6 +139,11 @@ struct RecordingsLibraryView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 5) {
+                    if record.wasAutomaticallyAnswered == true {
+                        Text(L10n.tr("自动接听"))
+                            .font(.caption)
+                            .foregroundStyle(Color.accentColor)
+                    }
                     if recordings.playingRecordingID == record.id {
                         Image(systemName: recordings.isPlaybackPlaying ? "waveform" : "play.fill")
                             .font(.caption2.weight(.semibold))
@@ -194,7 +205,8 @@ struct RecordingsLibraryView: View {
         let directional = recordings.records.filter { record in
             directionFilter == 0 ||
                 (directionFilter == 1 && record.direction == .incoming) ||
-                (directionFilter == 2 && record.direction == .outgoing)
+                (directionFilter == 2 && record.direction == .outgoing) ||
+                (directionFilter == 3 && record.wasAutomaticallyAnswered == true)
         }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return directional }
@@ -213,10 +225,10 @@ struct RecordingsLibraryView: View {
 
     private func selectFirstRecordingIfNeeded() {
         if let selectedRecordingID,
-           recordings.records.contains(where: { $0.id == selectedRecordingID }) {
+           filteredRecordingRecords.contains(where: { $0.id == selectedRecordingID }) {
             return
         }
-        selectedRecordingID = recordings.records.first?.id
+        selectedRecordingID = filteredRecordingRecords.first?.id
     }
 
     private func handleFocusFirstItemRequest() {
@@ -869,6 +881,11 @@ private struct RecordingInformationCard: View {
                 value: record.direction == .incoming ? L10n.tr("呼入") : L10n.tr("呼出")
             )
             informationRow("文件大小", value: fileSize)
+            if record.wasAutomaticallyAnswered == true {
+                Text(L10n.tr("自动接听"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+            }
         }
     }
 
@@ -878,6 +895,9 @@ private struct RecordingInformationCard: View {
                 .font(.headline)
             channelRow(color: .blue, title: "对方", value: L10n.tr("左声道"))
             channelRow(color: .indigo, title: "本机", value: L10n.tr("右声道"))
+            Text(L10n.tr("回放时双耳混音，原始文件保留左右分轨"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Label("仅保存在这台 Mac", systemImage: "internaldrive")
                 .font(.caption)
                 .foregroundStyle(.secondary)

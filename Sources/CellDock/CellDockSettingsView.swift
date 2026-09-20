@@ -58,6 +58,7 @@ struct CellDockSettingsView: View {
     @State private var didResolveInitialCategory = false
     @State private var isConfirmingVerificationAutoDelete = false
     @State private var isConfirmingAutomaticRecording = false
+    @State private var isConfirmingAutomaticAnswer = false
     @State private var microphoneAuthorizationStatus =
         AVCaptureDevice.authorizationStatus(for: .audio)
     @State private var presentedForwardingChannel: SMSForwardChannel?
@@ -113,6 +114,15 @@ struct CellDockSettingsView: View {
             }
         } message: {
             Text("通话接通后会自动录制双方的声音。请先确认已取得通话参与者同意，并遵守所在地法律法规。录音仅保存在这台 Mac。")
+        }
+        .alert(L10n.tr("开启自动接听并录音？"), isPresented: $isConfirmingAutomaticAnswer) {
+            Button(L10n.tr("取消"), role: .cancel) { }
+            Button(L10n.tr("同意并开启")) {
+                recordingConsent = true
+                appState.setAutomaticallyAnswerCalls(true)
+            }
+        } message: {
+            Text(L10n.tr("来电将自动接通并录音，不采集本机麦克风，对方声音通过当前输出设备播放。录音仅保存在这台 Mac，请确保通话参与者知情同意。"))
         }
         .sheet(item: $presentedForwardingChannel) { channel in
             smsForwardingConfigSheet(for: channel)
@@ -498,6 +508,27 @@ struct CellDockSettingsView: View {
     private var communicationSettings: some View {
         VStack(spacing: 16) {
             moduleStatusStrip
+
+            settingsSection(title: L10n.tr("自动接听")) {
+                VStack(spacing: 12) {
+                    settingRow(title: L10n.tr("自动接听并录音"),
+                        detail: L10n.tr("仅听对方，不采集本机麦克风；自动录音独立于下方开关。Mac 需保持唤醒且 CellDock 正在运行。")) {
+                        Toggle(L10n.tr("自动接听并录音"), isOn: Binding(
+                            get: { appState.automaticallyAnswerCalls },
+                            set: { enabled in
+                                if enabled { isConfirmingAutomaticAnswer = true }
+                                else { appState.setAutomaticallyAnswerCalls(false) }
+                            }
+                        )).labelsHidden().toggleStyle(.adaptiveGlass)
+                    }
+                    Stepper(value: Binding(
+                        get: { appState.automaticAnswerDelay },
+                        set: { appState.setAutomaticAnswerDelay($0) }
+                    ), in: 1...60) {
+                        Text(L10n.tr("检测到来电 %lld 秒后接听（下次来电生效）", Int64(appState.automaticAnswerDelay)))
+                    }
+                }.padding(16)
+            }
 
             settingsSection(title: L10n.tr("通话录音")) {
                 settingRow(

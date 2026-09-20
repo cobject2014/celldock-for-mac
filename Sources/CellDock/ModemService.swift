@@ -728,7 +728,9 @@ final class ModemService {
         }
     }
 
-    func answerCall(completion: @escaping (ModemActionResult) -> Void) {
+    private var listenOnlyCall = false
+
+    func answerCall(listenOnly: Bool = false, completion: @escaping (ModemActionResult) -> Void) {
         queue.async { [weak self] in
             guard let self, self.isOpen else {
                 DispatchQueue.main.async { completion(.failure(L10n.tr("模块未连接，无法接听。"))) }
@@ -739,6 +741,13 @@ final class ModemService {
                 return
             }
             let token = self.beginCallAction()
+            self.listenOnlyCall = listenOnly
+            self.callSnapshot.muted = listenOnly
+            self.voiceAudio.setMuted(listenOnly)
+            if listenOnly {
+                self.beginAnsweringCall(token: token, completion: completion)
+                return
+            }
             self.voiceAudio.requestMicrophoneAccess { [weak self] granted in
                 guard let self else { return }
                 self.queue.async {
@@ -787,6 +796,7 @@ final class ModemService {
     func setCallMuted(_ muted: Bool) {
         queue.async { [weak self] in
             guard let self, self.callSnapshot.hasCall else { return }
+            guard !self.listenOnlyCall else { return }
             self.voiceAudio.setMuted(muted)
             self.callSnapshot.muted = muted
             self.publishCallSnapshot()
@@ -1869,7 +1879,8 @@ final class ModemService {
             vendorID: vendorID,
             productID: productID,
             matchingLocationID: modemLocationID,
-            preferredUID: session.preferredUACUID
+            preferredUID: session.preferredUACUID,
+            listenOnly: listenOnlyCall
         ) { [weak self] result in
             guard let self else { return }
             self.queue.async {
@@ -2062,7 +2073,7 @@ final class ModemService {
             completion(.failure(L10n.tr("原始 PCM 后端状态无效。")))
             return
         }
-        voiceAudio.start(matchingLocationID: modemLocationID) { [weak self] result in
+        voiceAudio.start(matchingLocationID: modemLocationID, listenOnly: listenOnlyCall) { [weak self] result in
             guard let self else { return }
             self.queue.async {
                 guard self.isOpen, self.isCurrentCallAction(token) else {
@@ -2325,6 +2336,7 @@ final class ModemService {
         callSnapshot.number = nil
         callSnapshot.audioActive = false
         callSnapshot.muted = false
+        listenOnlyCall = false
         voiceAudio.setMuted(false)
         callSnapshot.startedAt = nil
         callSnapshot.lastEndReason = reason

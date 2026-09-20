@@ -1,5 +1,31 @@
 import Foundation
 
+struct AutomaticAnswerGate {
+    private var observedID: UUID?
+    private var deadline: TimeInterval?
+    private var suppressedID: UUID?
+
+    mutating func suppress(callID: UUID?) {
+        suppressedID = callID
+        deadline = nil
+    }
+
+    mutating func shouldAnswer(callID: UUID?, eligible: Bool, now: TimeInterval, delay: Int) -> Bool {
+        if observedID != callID {
+            observedID = callID
+            deadline = nil
+        }
+        guard let callID, eligible, suppressedID != callID else {
+            deadline = nil
+            return false
+        }
+        if deadline == nil { deadline = now + Double(max(1, min(60, delay))) }
+        guard now >= deadline! else { return false }
+        suppress(callID: callID)
+        return true
+    }
+}
+
 enum CallPhase: String, Equatable {
     case unavailable
     case idle

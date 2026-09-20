@@ -57,6 +57,12 @@ final class AppState: ObservableObject {
     @Published private(set) var hideMenuBarIconWhenDisconnected: Bool
     @Published private(set) var autoDeleteReadVerificationMessages: Bool
     @Published private(set) var automaticallyRecordCalls: Bool
+    @Published private(set) var automaticallyAnswerCalls = UserDefaults.standard.bool(forKey: "AutomaticallyAnswerCalls.v1")
+    @Published private(set) var automaticAnswerDelay = max(1, min(60,
+        (UserDefaults.standard.object(forKey: "AutomaticAnswerDelay.v1") as? Int) ?? 3))
+    private var automaticAnswerGate = AutomaticAnswerGate()
+    private var automaticAnswerTimer: Task<Void, Never>?
+    private var automaticallyAnsweredCallID: UUID?
     @Published private(set) var isPresentationPrivacyEnabled: Bool
     @Published private(set) var isMenuBarStatusItemVisible: Bool
     @Published private(set) var showsMenuBarNetworkSpeed: Bool
@@ -465,6 +471,14 @@ final class AppState: ObservableObject {
     }
 
     func start() {
+        if automaticAnswerTimer == nil {
+            automaticAnswerTimer = Task { [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(nanoseconds: 250_000_000) } catch { return }
+                    self?.checkAutomaticAnswer()
+                }
+            }
+        }
         guard !started else { return }
         started = true
         SOCKSSignalSafety.install()
@@ -988,7 +1002,9 @@ final class AppState: ObservableObject {
         moduleCallSnapshots[moduleID] = taggedSnapshot
         let completedCall = callHistory.consume(
             previous: previousModuleCall,
-            current: taggedSnapshot
+            current: taggedSnapshot,
+            automaticallyAnswered: automaticallyAnsweredCallID != nil &&
+                automaticallyAnsweredCallID == callHistory.currentCallID(for: moduleID)
         )
 
         if taggedSnapshot.hasCall {
@@ -2221,6 +2237,34 @@ final class AppState: ObservableObject {
     }
 
     func answerCall() {
+        automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
+        automaticallyAnsweredCallID = nil
+        answerCall(listenOnly: false)
+    }
+
+    func setAutomaticallyAnswerCalls(_ enabled: Bool) {
+        automaticallyAnswerCalls = enabled
+        UserDefaults.standard.set(enabled, forKey: "AutomaticallyAnswerCalls.v1")
+        if !enabled { automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID)) }
+    }
+
+    func setAutomaticAnswerDelay(_ seconds: Int) {
+        automaticAnswerDelay = max(1, min(60, seconds))
+        UserDefaults.standard.set(automaticAnswerDelay, forKey: "AutomaticAnswerDelay.v1")
+    }
+
+    private func checkAutomaticAnswer() {
+        let id = callHistory.currentCallID(for: call.moduleID)
+        let eligible = automaticallyAnswerCalls && call.phase == .incoming &&
+            !isChangingCall && !euiccSnapshot(for: call.moduleID).isBusy &&
+            !moduleCallSnapshots.contains { $0.key != call.moduleID && $0.value.phase == .active }
+        guard automaticAnswerGate.shouldAnswer(callID: id, eligible: eligible,
+            now: ProcessInfo.processInfo.systemUptime, delay: automaticAnswerDelay) else { return }
+        automaticallyAnsweredCallID = id
+        answerCall(listenOnly: true)
+    }
+
+    private func answerCall(listenOnly: Bool) {
         let moduleID = activeCallModuleID ?? call.moduleID
         guard let service = modemService(for: moduleID) else {
             presentTransientMessage(L10n.tr("来电模组已断开。"), isError: true)
@@ -2232,7 +2276,7 @@ final class AppState: ObservableObject {
         }
         guard !isChangingCall else { return }
         isChangingCall = true
-        service.answerCall { [weak self] result in
+        service.answerCall(listenOnly: listenOnly) { [weak self] result in
             guard let self else { return }
             self.isChangingCall = false
             self.show(result)
@@ -2240,6 +2284,7 @@ final class AppState: ObservableObject {
     }
 
     func hangUp() {
+        automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
         guard !isChangingCall else { return }
         guard let service = modemService(for: activeCallModuleID ?? call.moduleID) else {
             presentTransientMessage(L10n.tr("通话模组已断开。"), isError: true)
@@ -2267,7 +2312,8 @@ final class AppState: ObservableObject {
             localNumber: call.moduleID.map(moduleSnapshot(for:))?.simPhoneNumber,
             number: call.number ?? "",
             direction: call.direction ?? .outgoing,
-            callID: callHistory.currentCallID(for: call.moduleID)
+            callID: callHistory.currentCallID(for: call.moduleID),
+            wasAutomaticallyAnswered: isCurrentCallAutomaticallyAnswered
         )
         if let error = callRecordings.lastError {
             presentTransientMessage(L10n.tr("无法开始通话录音：%@", error), isError: true)
@@ -2275,7 +2321,8 @@ final class AppState: ObservableObject {
     }
 
     private func startAutomaticCallRecordingIfNeeded() {
-        guard automaticallyRecordCalls,
+        guard automaticallyRecordCalls || (automaticallyAnsweredCallID != nil &&
+                automaticallyAnsweredCallID == callHistory.currentCallID(for: call.moduleID)),
               call.phase == .active,
               call.audioActive,
               let callID = callHistory.currentCallID(for: call.moduleID),
@@ -2285,6 +2332,11 @@ final class AppState: ObservableObject {
         automaticRecordingAttemptedCallID = callID
         guard callRecordings.phase == .idle else { return }
         startCallRecording()
+    }
+
+    var isCurrentCallAutomaticallyAnswered: Bool {
+        call.phase == .active && automaticallyAnsweredCallID != nil &&
+            automaticallyAnsweredCallID == callHistory.currentCallID(for: call.moduleID)
     }
 
     func stopCallRecording(completion: (() -> Void)? = nil) {

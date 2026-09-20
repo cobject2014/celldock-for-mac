@@ -1702,3 +1702,11 @@
 "删除整个会话" = "Delete entire conversation";
 "短信操作" = "Message actions";
 "将删除此会话中的 %lld 条短信，并尝试清理模块中的对应短信。此操作无法撤销，确认期间新收到的短信不会删除。" = "Delete %lld messages in this conversation and attempt to remove their copies from the module. This cannot be undone. Messages received while confirming will not be deleted.";
+"开启自动接听并录音？" = "Enable automatic answering and recording?";
+"来电将自动接通并录音，不采集本机麦克风，对方声音通过当前输出设备播放。录音仅保存在这台 Mac，请确保通话参与者知情同意。" = "Calls will be answered and recorded without capturing the Mac microphone. Remote audio plays through the current output. Recordings stay on this Mac; obtain participants’ informed consent.";
+"自动接听" = "Automatic answering";
+"自动接听并录音" = "Automatically answer and record";
+"仅听对方，不采集本机麦克风；自动录音独立于下方开关。Mac 需保持唤醒且 CellDock 正在运行。" = "Listen only, without capturing the Mac microphone; recording is independent of the switch below. Keep the Mac awake and CellDock running.";
+"检测到来电 %lld 秒后接听（下次来电生效）" = "Answer %lld seconds after detecting a call (next call)";
+"自动接听 · 仅听" = "Auto-answered · Listen only";
+"回放时双耳混音，原始文件保留左右分轨" = "Playback mixes both tracks to both ears; original files retain separate channels";

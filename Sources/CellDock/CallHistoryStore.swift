@@ -12,6 +12,7 @@ struct CallHistoryRecord: Identifiable, Codable, Equatable {
     let endReason: CallEndReason?
     var recordingID: UUID?
     var missedCallAcknowledged: Bool? = nil
+    var wasAutomaticallyAnswered: Bool? = nil
 
     var duration: TimeInterval {
         guard let connectedAt else { return 0 }
@@ -44,6 +45,7 @@ final class CallHistoryStore: ObservableObject {
         let startedAt: Date
         var connectedAt: Date?
         var recordingID: UUID?
+        var wasAutomaticallyAnswered = false
     }
 
     private let fileURL: URL
@@ -72,7 +74,8 @@ final class CallHistoryStore: ObservableObject {
     func consume(
         previous: CallSnapshot,
         current: CallSnapshot,
-        now: Date = Date()
+        now: Date = Date(),
+        automaticallyAnswered: Bool = false
     ) -> CallHistoryRecord? {
         let key = pendingKey(for: current.moduleID ?? previous.moduleID)
         if pendingCalls[key] == nil, current.hasCall {
@@ -90,6 +93,9 @@ final class CallHistoryStore: ObservableObject {
         }
 
         if current.hasCall, var pendingCall = pendingCalls[key] {
+            if current.phase == .active && automaticallyAnswered {
+                pendingCall.wasAutomaticallyAnswered = true
+            }
             if let direction = current.direction { pendingCall.direction = direction }
             if let number = current.number, !number.isEmpty { pendingCall.number = number }
             if let moduleID = current.moduleID { pendingCall.moduleID = moduleID }
@@ -116,7 +122,8 @@ final class CallHistoryStore: ObservableObject {
             endedAt: now,
             endReason: endReason,
             recordingID: pendingCall.recordingID,
-            missedCallAcknowledged: isMissed ? false : nil
+            missedCallAcknowledged: isMissed ? false : nil,
+            wasAutomaticallyAnswered: pendingCall.wasAutomaticallyAnswered
         )
         records.insert(record, at: 0)
         if records.count > 1_000 {
