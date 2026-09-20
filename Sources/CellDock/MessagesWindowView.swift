@@ -12,6 +12,7 @@ struct MessagesWindowView: View {
     @State private var searchText = ""
     @State private var isComposingNew = false
     @State private var newDestination = ""
+    @State private var conversationToDelete: MessageConversation?
     @FocusState private var listFocused: Bool
 
     var body: some View {
@@ -72,6 +73,21 @@ struct MessagesWindowView: View {
             isComposingNew = false
             markSelectedConversationRead()
         }
+        .alert(L10n.tr("删除整个会话？"), isPresented: Binding(
+            get: { conversationToDelete != nil },
+            set: { if !$0 { conversationToDelete = nil } }
+        ), presenting: conversationToDelete) { conversation in
+            Button(L10n.tr("取消"), role: .cancel) { conversationToDelete = nil }
+            Button(L10n.tr("删除"), role: .destructive) {
+                appState.deleteConversation(conversation)
+                conversationToDelete = nil
+            }
+        } message: { conversation in
+            Text(L10n.tr(
+                "将删除此会话中的 %lld 条短信，并尝试清理模块中的对应短信。此操作无法撤销，确认期间新收到的短信不会删除。",
+                Int64(conversation.messages.count)
+            ))
+        }
     }
 
     private var conversationSidebar: some View {
@@ -117,6 +133,10 @@ struct MessagesWindowView: View {
                             }
                             Button(L10n.tr("全部标为已读"), systemImage: "envelope.open") {
                                 markConversationRead(conversation)
+                            }
+                            Divider()
+                            Button(L10n.tr("删除整个会话"), systemImage: "trash", role: .destructive) {
+                                conversationToDelete = conversation
                             }
                         }
                     }
@@ -382,7 +402,26 @@ private struct MessageThreadView: View {
                                 .foregroundStyle(.tertiary)
                                 .padding(.vertical, 5)
                         }
-                        MessageBubble(message: message)
+                        HStack(alignment: .bottom, spacing: 4) {
+                            MessageBubble(message: message)
+                            Menu {
+                                Button(L10n.tr("复制"), systemImage: "doc.on.doc") {
+                                    appState.copy(message)
+                                }
+                                Divider()
+                                Button(L10n.tr("删除"), systemImage: "trash", role: .destructive) {
+                                    appState.delete(message)
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .accessibilityLabel(L10n.tr("短信操作"))
+                            .help(L10n.tr("短信操作"))
+                        }
                             .id(message.id)
                             .contextMenu {
                                 Button(L10n.tr("复制"), systemImage: "doc.on.doc") {

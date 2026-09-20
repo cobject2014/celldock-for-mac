@@ -2502,6 +2502,12 @@ final class AppState: ObservableObject {
         delete(message, automatically: false)
     }
 
+    func deleteConversation(_ conversation: MessageConversation) {
+        for message in conversation.deletionTargets(in: messageStore.messages) {
+            delete(message)
+        }
+    }
+
     private func delete(_ message: SMSMessage, automatically: Bool) {
         guard let currentMessage = messageStore.messages.first(where: { $0.id == message.id }),
               deletingMessageIDs.insert(currentMessage.id).inserted else {

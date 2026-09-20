@@ -1695,3 +1695,7 @@
 "来自：%@\n接收：%@（%@）\n时间：%@\n内容：%@" = "Expéditeur : %@\nDestinataire : %@ (%@)\nHeure : %@\nMessage : %@";
 "号码未知" = "Numéro inconnu";
 "模组未知" = "Module inconnu";
+"删除整个会话？" = "Supprimer toute la conversation ?";
+"删除整个会话" = "Supprimer toute la conversation";
+"短信操作" = "Actions du message";
+"将删除此会话中的 %lld 条短信，并尝试清理模块中的对应短信。此操作无法撤销，确认期间新收到的短信不会删除。" = "Supprimer les %lld messages de cette conversation et tenter de supprimer leurs copies du module. Cette opération est irréversible. Les messages reçus pendant la confirmation ne seront pas supprimés.";

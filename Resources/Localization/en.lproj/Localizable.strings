@@ -1698,3 +1698,7 @@
 "来自：%@\n接收：%@（%@）\n时间：%@\n内容：%@" = "From: %@\nTo: %@ (%@)\nTime: %@\nMessage: %@";
 "号码未知" = "Unknown number";
 "模组未知" = "Unknown module";
+"删除整个会话？" = "Delete entire conversation?";
+"删除整个会话" = "Delete entire conversation";
+"短信操作" = "Message actions";
+"将删除此会话中的 %lld 条短信，并尝试清理模块中的对应短信。此操作无法撤销，确认期间新收到的短信不会删除。" = "Delete %lld messages in this conversation and attempt to remove their copies from the module. This cannot be undone. Messages received while confirming will not be deleted.";

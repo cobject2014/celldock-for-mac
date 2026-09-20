@@ -18,6 +18,16 @@ struct MessageConversation: Identifiable, Equatable {
         unreadCount > 0
     }
 
+    /// Delete only messages shown when confirmation opened, still owned by
+    /// this conversation. New arrivals and other SIMs are never included.
+    func deletionTargets(in currentMessages: [SMSMessage]) -> [SMSMessage] {
+        let confirmedIDs = Set(messages.map(\.id))
+        return currentMessages.filter {
+            confirmedIDs.contains($0.id) && $0.moduleID == moduleID &&
+                Self.conversationID(for: $0.peerAddress, moduleID: $0.moduleID) == id
+        }
+    }
+
     static func conversationID(
         for address: String,
         moduleID: CellularModuleID? = nil

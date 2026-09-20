@@ -48,6 +48,22 @@ do {
     let legacy = SMSForwardingText.format(forwardedMessage, recipients: recipients)
     try expect(!legacy.contains("111111") && !legacy.contains("222222"), "legacy SMS guessed a receiving SIM")
 
+    var deleteA = forwardedMessage
+    deleteA.id = "delete-a"
+    deleteA.moduleID = recipientA
+    var deleteB = deleteA
+    deleteB.id = "delete-b"
+    deleteB.moduleID = recipientB
+    var arrivedLater = deleteA
+    arrivedLater.id = "arrived-after-confirmation"
+    let deleteConversation = MessageConversation.grouped(from: [deleteA])[0]
+    let deleteTargets = deleteConversation.deletionTargets(in: [deleteA, deleteB, arrivedLater])
+    try expect(deleteTargets.map(\.id) == ["delete-a"], "conversation deletion crossed module or confirmation snapshot")
+    try expect(deleteConversation.deletionTargets(in: [deleteB]).isEmpty, "stale conversation deleted another SIM")
+    var movedMessage = deleteA
+    movedMessage.moduleID = recipientB
+    try expect(deleteConversation.deletionTargets(in: [movedMessage]).isEmpty, "changed ownership bypassed deletion scope")
+
     try MainActor.assumeIsolated {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CellDock-archive-tests-\(UUID().uuidString)")
