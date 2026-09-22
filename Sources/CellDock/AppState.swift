@@ -481,6 +481,13 @@ final class AppState: ObservableObject {
         }
         guard !started else { return }
         started = true
+        callRecordings.onRecordingSaved = { record in
+            CallTranscriptionStore.shared.enqueue(record)
+        }
+        callRecordings.onRecordingDeleted = { id in
+            CallTranscriptionStore.shared.remove(id)
+        }
+        CallTranscriptionStore.shared.start()
         SOCKSSignalSafety.install()
         socksProxyController.start()
         voWiFiController.start()

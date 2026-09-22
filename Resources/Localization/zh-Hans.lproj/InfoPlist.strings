@@ -1,3 +1,4 @@
 "CFBundleDisplayName" = "CellDock";
 "NSMicrophoneUsageDescription" = "用于通过蜂窝模块在 Mac 上进行语音通话。";
 "NSContactsUsageDescription" = "用于查找、拨打、发送短信以及管理 Mac 系统通讯录中的联系人。";
+"NSLocalNetworkUsageDescription" = "用于连接你配置的局域网 ASR 服务，将通话录音转录为文本。";

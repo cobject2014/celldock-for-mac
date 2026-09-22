@@ -1,3 +1,4 @@
 "CFBundleDisplayName" = "CellDock";
 "NSMicrophoneUsageDescription" = "CellDockは、モバイル通信モジュールを使った音声通話にマイクを使用します。";
 "NSContactsUsageDescription" = "CellDockは、発信者の識別、通話、メッセージ送信、Mac上の連絡先管理に連絡先を使用します。";
+"NSLocalNetworkUsageDescription" = "設定したローカル ASR サービスに接続し、通話録音を文字起こしします。";
