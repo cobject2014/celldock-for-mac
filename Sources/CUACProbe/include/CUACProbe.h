@@ -93,7 +93,9 @@ int celldock_uac_probe_stop(CellDockUACProbe *probe);
 /* Mono 8 kHz PCM16 frame APIs. These functions never call a CoreAudio
  * callback and may be used from a non-realtime worker. Returns frames copied
  * or accepted; a full uplink ring drops new frames to keep the callback
- * lock-free. */
+ * lock-free. Uplink writes and flush requests must share one producer thread.
+ * Writes return zero until an outstanding flush has completed on the output
+ * callback. Retry unaccepted frames when preserving every sample matters. */
 size_t celldock_uac_probe_read_downlink_pcm16(
     CellDockUACProbe *probe,
     int16_t *frames,

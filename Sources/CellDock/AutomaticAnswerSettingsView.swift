@@ -40,6 +40,11 @@ struct AutomaticAnswerSettingsView: View {
                 .padding(16)
             }
 
+            section(title: L10n.tr("接通欢迎语")) {
+                WelcomeGreetingSettings()
+                    .padding(16)
+            }
+
             section(title: L10n.tr("录音转录与推送")) {
                 RecordingTranscriptionSettings()
                     .padding(16)

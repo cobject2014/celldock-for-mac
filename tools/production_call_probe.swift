@@ -58,7 +58,7 @@ struct ProductionCallProbe {
                 print("CALL \(description)")
             }
         }
-        service.onMessages = { _, _ in }
+        service.onMessages = { _, _, _ in [] }
         service.start()
 
         defer {

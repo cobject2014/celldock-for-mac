@@ -32,6 +32,8 @@ final class VoiceAudioService {
     private var muted = false
     private var uacCleanupPending = false
     private var sessionGeneration: UInt64 = 0
+    // Guarded by stateLock; independent of microphone mute and its rolling queue.
+    private var welcomePlayback = CallWelcomePlayback()
     private var uploadBytes = Data()
     private var captureSamples: [Float] = []
     private var capturePosition = 0.0
@@ -413,6 +415,7 @@ final class VoiceAudioService {
             mediaEnabled = false
             muted = false
             activeUAC = nil
+            welcomePlayback.cancel()
         }
         clearUploadBytes()
         guard let completion else { return }
@@ -420,8 +423,33 @@ final class VoiceAudioService {
     }
 
     func setMediaEnabled(_ enabled: Bool) {
-        stateLock.withLock { mediaEnabled = enabled }
+        stateLock.withLock {
+            mediaEnabled = enabled
+            if !enabled { welcomePlayback.cancel() }
+        }
         if !enabled { clearUploadBytes() }
+    }
+
+    /// Already converted PCM16 mono/8 kHz. Does not access the Mac microphone.
+    func playWelcome(_ pcm: Data) {
+        stateLock.withLock {
+            guard running, mediaEnabled, !pcm.isEmpty, pcm.count % 2 == 0 else { return }
+            welcomePlayback.start(pcm)
+        }
+    }
+
+    private func welcomeChunk(maximumFrames: Int, session: UInt64) -> Data? {
+        stateLock.withLock {
+            guard sessionGeneration == session, running, mediaEnabled, welcomePlayback.isPlaying else { return nil }
+            return welcomePlayback.peek(maximumFrames: maximumFrames, now: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+
+    private func consumeWelcome(frames: Int, session: UInt64) {
+        stateLock.withLock {
+            guard sessionGeneration == session else { return }
+            welcomePlayback.consume(frames: frames)
+        }
     }
 
     func setPCMFlowReady(_ ready: Bool) {
@@ -658,7 +686,16 @@ final class VoiceAudioService {
             }
             muteWasEnabled = state.2
 
-            let uplinkFrames = takeUploadSamples(into: &uplinkSamples)
+            // A short paced chunk keeps the device ring responsive to hangup.
+            // Commit only accepted frames: a full UAC ring must not truncate speech.
+            let welcome = welcomeChunk(maximumFrames: 160, session: session)
+            let uplinkFrames: Int
+            if let welcome {
+                uplinkFrames = welcome.count / 2
+                for frame in 0..<uplinkFrames {
+                    uplinkSamples[frame] = Int16(bitPattern: UInt16(welcome[frame * 2]) | UInt16(welcome[frame * 2 + 1]) << 8)
+                }
+            } else { uplinkFrames = takeUploadSamples(into: &uplinkSamples) }
             if uplinkFrames > 0 {
                 let acceptedFrames = uplinkSamples.withUnsafeBufferPointer { samples in
                     celldock_uac_probe_write_uplink_pcm16(
@@ -668,6 +705,7 @@ final class VoiceAudioService {
                     )
                 }
                 if acceptedFrames > 0 {
+                    if welcome != nil { consumeWelcome(frames: min(acceptedFrames, uplinkFrames), session: session) }
                     let byteCount = min(acceptedFrames, uplinkFrames) * MemoryLayout<Int16>.size
                     let pcm = uplinkSamples.withUnsafeBytes { bytes in
                         Data(bytes: bytes.baseAddress!, count: byteCount)
@@ -738,7 +776,11 @@ final class VoiceAudioService {
             guard state.0 else { break }
 
             if state.1, state.2, beforeRead >= nextTransmit {
-                let chunk = takeUploadChunkOrSilence()
+                let welcome = welcomeChunk(maximumFrames: transmitChunkBytes / 2, session: session)
+                var chunk = welcome ?? takeUploadChunkOrSilence()
+                if chunk.count < transmitChunkBytes {
+                    chunk.append(Data(repeating: 0, count: transmitChunkBytes - chunk.count))
+                }
                 let writeResult = chunk.withUnsafeBytes { rawBuffer -> Int32 in
                     let bytes = rawBuffer.bindMemory(to: UInt8.self)
                     return celldock_voice_write(voice, 80, bytes.baseAddress, bytes.count)
@@ -747,6 +789,7 @@ final class VoiceAudioService {
                     reportTransportError(voice, session: session)
                     break
                 }
+                if let welcome { consumeWelcome(frames: welcome.count / 2, session: session) }
                 CallRecordingCapture.shared.appendUplink(chunk)
                 nextTransmit &+= 100_000_000
                 if beforeRead > nextTransmit + 100_000_000 {
@@ -903,6 +946,7 @@ final class VoiceAudioService {
     }
 
     private func resetBuffers() {
+        stateLock.withLock { welcomePlayback.cancel() }
         clearUploadBytes()
         playbackQueue.async { [weak self] in
             self?.scheduledPlaybackFrames = 0
@@ -916,6 +960,7 @@ final class VoiceAudioService {
     }
 
     private func resetBuffersSynchronously() {
+        stateLock.withLock { welcomePlayback.cancel() }
         clearUploadBytes()
         playbackQueue.sync {
             scheduledPlaybackFrames = 0

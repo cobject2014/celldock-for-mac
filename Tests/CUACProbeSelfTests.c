@@ -91,6 +91,29 @@ static void test_float_uplink_and_flush(void) {
     }
 }
 
+static void test_greeting_waits_for_flush(void) {
+    CellDockUACProbe probe = {0};
+    int16_t old_audio[] = {-100, -200, -300, -400};
+    int16_t greeting[] = {123, 456, 789, 1024};
+    int16_t output[4] = {0};
+    AudioBufferList buffers = {0};
+    probe.output.sample_kind = CELLDOCK_UAC_SAMPLES_INT16_NATIVE;
+    probe.output.bytes_per_frame = sizeof(int16_t);
+    buffers.mNumberBuffers = 1;
+    buffers.mBuffers[0].mNumberChannels = 1;
+    buffers.mBuffers[0].mDataByteSize = sizeof(output);
+    buffers.mBuffers[0].mData = output;
+    assert(celldock_uac_probe_write_uplink_pcm16(&probe, old_audio, 4) == 4);
+    celldock_uac_probe_flush_uplink_pcm(&probe);
+    // An accepted prefix would be consumed by the caller and then lost on flush.
+    assert(celldock_uac_probe_write_uplink_pcm16(&probe, greeting, 4) == 0);
+    write_output_pcm(&probe, &buffers);
+    for (size_t index = 0; index < 4; index++) { assert(output[index] == 0); }
+    assert(celldock_uac_probe_write_uplink_pcm16(&probe, greeting, 4) == 4);
+    write_output_pcm(&probe, &buffers);
+    assert(memcmp(output, greeting, sizeof(greeting)) == 0);
+}
+
 int main(void) {
     CellDockUACProbe *lifecycle = celldock_uac_probe_create();
     assert(lifecycle != NULL);
@@ -98,6 +121,7 @@ int main(void) {
     test_ring_wrap_and_capacity();
     test_float_downlink_conversion();
     test_float_uplink_and_flush();
+    test_greeting_waits_for_flush();
     puts("CUACProbe self-tests passed (ring, Float32/PCM16, flush).");
     return 0;
 }

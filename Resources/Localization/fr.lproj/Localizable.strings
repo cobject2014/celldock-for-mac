@@ -1748,3 +1748,26 @@
 "接听、转录与推送" = "Réponse, transcription et envoi";
 "仅听对方，不采集本机麦克风；不受“通话时自动录音”开关影响。Mac 需保持唤醒且 CellDock 正在运行。" = "Écoute uniquement, sans capturer le microphone du Mac ; indépendant de « Enregistrer automatiquement les appels ». Gardez le Mac éveillé et CellDock ouvert.";
 "USB 音频输入也需要系统麦克风权限，请在“通知与权限”中确认已允许。仅听模式不会采集 Mac 麦克风。" = "L’entrée audio USB nécessite aussi l’autorisation du microphone. Vérifiez Notifications et autorisations. Le mode écoute seule ne capture pas le microphone du Mac.";
+
+/* Automatic answer greeting */
+"接通欢迎语" = "Message d’accueil";
+"接通后播放欢迎语" = "Lire un message après la réponse";
+"仅自动接听时向来电方播放一次。不采集 Mac 麦克风；欢迎语不会加入仅识别来电方的转录音轨。" = "Lu une seule fois à l’appelant lors d’une réponse automatique. Le microphone du Mac n’est pas capté et le message est exclu de la transcription de l’appelant.";
+"尚未生成欢迎语" = "Aucun message généré";
+"欢迎语已缓存，接通后即可播放" = "Message enregistré et prêt à être lu";
+"配置接通欢迎语" = "Configurer le message d’accueil";
+"TTS 服务地址" = "Adresse du service TTS";
+"音色" = "Voix";
+"语速" = "Débit de parole";
+"欢迎语文字" = "Texte du message";
+"保存时调用 TTS 生成并缓存语音；修改失败会保留原欢迎语。密钥仅保存在本机配置文件，不使用钥匙串。" = "L’enregistrement génère et conserve la voix via TTS. En cas d’échec, le message précédent est conservé. La clé est stockée dans un fichier local, sans le Trousseau.";
+"合成可能需要几分钟。保存后可在上一页试听；新配置从下次自动接听生效。" = "La synthèse peut prendre quelques minutes. Écoutez le message enregistré sur la page précédente. Les changements s’appliquent à la prochaine réponse automatique.";
+"正在生成欢迎语…" = "Génération du message…";
+"生成并保存" = "Générer et enregistrer";
+"请填写有效的 TTS 地址、API Key、音色和欢迎语（最多 5000 字），语速范围为 0.5–2.0。" = "Saisissez une adresse TTS, une clé API, une voix et un message valides (5000 caractères maximum), avec un débit de 0,5 à 2,0.";
+"TTS 未返回有效语音，或语音超过 5 分钟。" = "TTS a renvoyé un audio invalide ou le message dépasse cinq minutes.";
+"无法保存欢迎语，请检查本机存储空间和文件权限。" = "Impossible d’enregistrer le message. Vérifiez l’espace disponible et les autorisations des fichiers.";
+"请先配置并生成欢迎语。" = "Configurez et générez d’abord un message.";
+"正在生成欢迎语，请稍候。" = "Un message est en cours de génération. Veuillez patienter.";
+"TTS 请求失败（HTTP %d）。" = "Échec de la requête TTS (HTTP %d).";
+"TTS 连接失败（错误码 %d）。" = "Échec de la connexion TTS (erreur %d).";

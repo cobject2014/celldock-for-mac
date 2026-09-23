@@ -729,8 +729,9 @@ final class ModemService {
     }
 
     private var listenOnlyCall = false
+    private var welcomeTrigger = CallWelcomeTrigger()
 
-    func answerCall(listenOnly: Bool = false, completion: @escaping (ModemActionResult) -> Void) {
+    func answerCall(listenOnly: Bool = false, welcomePCM: Data? = nil, completion: @escaping (ModemActionResult) -> Void) {
         queue.async { [weak self] in
             guard let self, self.isOpen else {
                 DispatchQueue.main.async { completion(.failure(L10n.tr("模块未连接，无法接听。"))) }
@@ -742,6 +743,7 @@ final class ModemService {
             }
             let token = self.beginCallAction()
             self.listenOnlyCall = listenOnly
+            self.welcomeTrigger.arm(pcm: welcomePCM, automatic: listenOnly)
             self.callSnapshot.muted = listenOnly
             self.voiceAudio.setMuted(listenOnly)
             if listenOnly {
@@ -2337,6 +2339,7 @@ final class ModemService {
         callSnapshot.audioActive = false
         callSnapshot.muted = false
         listenOnlyCall = false
+        welcomeTrigger.arm(pcm: nil, automatic: false)
         voiceAudio.setMuted(false)
         callSnapshot.startedAt = nil
         callSnapshot.lastEndReason = reason
@@ -3650,6 +3653,11 @@ final class ModemService {
     }
 
     private func publishCallSnapshot() {
+        if let pcm = welcomeTrigger.take(hasCall: callSnapshot.hasCall,
+                                         active: callSnapshot.phase == .active,
+                                         audioReady: callSnapshot.audioActive) {
+            voiceAudio.playWelcome(pcm)
+        }
         callSnapshot.mediaCleanupPending = hasPendingMediaCleanup
         callSnapshot.uacMedia = voiceAudio.uacMediaSnapshot
         let value = callSnapshot

@@ -2283,7 +2283,8 @@ final class AppState: ObservableObject {
         }
         guard !isChangingCall else { return }
         isChangingCall = true
-        service.answerCall(listenOnly: listenOnly) { [weak self] result in
+        let welcomePCM = listenOnly ? CallWelcomeStore.shared.audioForCall : nil
+        service.answerCall(listenOnly: listenOnly, welcomePCM: welcomePCM) { [weak self] result in
             guard let self else { return }
             self.isChangingCall = false
             self.show(result)

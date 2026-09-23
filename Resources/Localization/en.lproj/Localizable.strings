@@ -1751,3 +1751,26 @@
 "接听、转录与推送" = "Answering, transcription, and delivery";
 "仅听对方，不采集本机麦克风；不受“通话时自动录音”开关影响。Mac 需保持唤醒且 CellDock 正在运行。" = "Listen only, without capturing the Mac microphone; independent of “Automatically record calls.” Keep the Mac awake and CellDock running.";
 "USB 音频输入也需要系统麦克风权限，请在“通知与权限”中确认已允许。仅听模式不会采集 Mac 麦克风。" = "USB audio input also requires microphone permission. Check Notifications & Permissions. Listen-only mode does not capture the Mac microphone.";
+
+/* Automatic answer greeting */
+"接通欢迎语" = "Call greeting";
+"接通后播放欢迎语" = "Play a greeting after answering";
+"仅自动接听时向来电方播放一次。不采集 Mac 麦克风；欢迎语不会加入仅识别来电方的转录音轨。" = "Play once to the caller on automatic answers only. The Mac microphone is not captured, and the greeting is excluded from caller-only transcription.";
+"尚未生成欢迎语" = "No greeting generated yet";
+"欢迎语已缓存，接通后即可播放" = "Greeting cached and ready to play";
+"配置接通欢迎语" = "Configure call greeting";
+"TTS 服务地址" = "TTS service URL";
+"音色" = "Voice";
+"语速" = "Speaking rate";
+"欢迎语文字" = "Greeting text";
+"保存时调用 TTS 生成并缓存语音；修改失败会保留原欢迎语。密钥仅保存在本机配置文件，不使用钥匙串。" = "Saving generates and caches speech through TTS. Failed changes keep the previous greeting. The key is stored in a local configuration file, without Keychain.";
+"合成可能需要几分钟。保存后可在上一页试听；新配置从下次自动接听生效。" = "Synthesis may take a few minutes. Preview the saved greeting on the previous page. Changes apply to the next automatic answer.";
+"正在生成欢迎语…" = "Generating greeting…";
+"生成并保存" = "Generate and save";
+"请填写有效的 TTS 地址、API Key、音色和欢迎语（最多 5000 字），语速范围为 0.5–2.0。" = "Enter a valid TTS URL, API key, voice, and greeting (up to 5000 characters), with a speaking rate from 0.5 to 2.0.";
+"TTS 未返回有效语音，或语音超过 5 分钟。" = "TTS returned invalid audio, or the greeting exceeds five minutes.";
+"无法保存欢迎语，请检查本机存储空间和文件权限。" = "Unable to save the greeting. Check local storage and file permissions.";
+"请先配置并生成欢迎语。" = "Configure and generate a greeting first.";
+"正在生成欢迎语，请稍候。" = "A greeting is being generated. Please wait.";
+"TTS 请求失败（HTTP %d）。" = "TTS request failed (HTTP %d).";
+"TTS 连接失败（错误码 %d）。" = "TTS connection failed (error %d).";
