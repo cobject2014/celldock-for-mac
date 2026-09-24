@@ -29,19 +29,25 @@ final class BackupRestoreCoordinator: ObservableObject {
     nonisolated static var control: URL { root.appendingPathComponent("BackupRecovery") }
     nonisolated static var journal: URL { control.appendingPathComponent("journal.json") }
     nonisolated static var rollback: URL { control.appendingPathComponent("rollback.celldockbackup") }
+    nonisolated static var recoveryRequired: Bool {
+        do {
+            _ = try BackupRestoreTransaction.outcome(at: journal)
+            return BackupRestoreTransaction.hasPendingRecovery(at: journal)
+        } catch { return true }
+    }
     static var maintenanceRequired: Bool {
         #if DEBUG
         if root.path.hasPrefix("/private/tmp/CellDock-UI-") { return true }
         #endif
         return UserDefaults.standard.bool(forKey: maintenanceKey) || UserDefaults.standard.bool(forKey: reviewKey) ||
-        BackupRestoreTransaction.hasPendingRecovery(at: journal)
+        recoveryRequired || (try? BackupRestoreTransaction.outcome(at: journal)) == .committed
     }
     @Published private(set) var busy = false
     @Published private(set) var committing = false
     @Published private(set) var message = ""
     @Published private(set) var preview: BackupManifest?
-    @Published private(set) var needsRecovery = BackupRestoreTransaction.hasPendingRecovery(at: journal)
-    @Published private(set) var needsReview = UserDefaults.standard.bool(forKey: reviewKey)
+    @Published private(set) var needsRecovery = recoveryRequired
+    @Published private(set) var needsReview = (try? BackupRestoreTransaction.outcome(at: journal)) == .committed
     @Published private(set) var bytes: UInt64 = 0
     private var snapshot: BackupSnapshot?
     private var previewPassword = ""
@@ -84,7 +90,8 @@ final class BackupRestoreCoordinator: ObservableObject {
     private func fail(_ error: Error) {
         if case BackupError.cancelled = error { message = L10n.tr("操作已取消，原数据未更改。") }
         else { message = L10n.tr("操作失败。请检查密码、备份完整性、磁盘空间和钥匙串授权。") }
-        needsRecovery = BackupRestoreTransaction.hasPendingRecovery(at: Self.journal)
+        needsRecovery = Self.recoveryRequired
+        needsReview = (try? BackupRestoreTransaction.outcome(at: Self.journal)) == .committed
     }
     func backup(to directory: URL, password: String) async {
         #if DEBUG
@@ -140,8 +147,9 @@ final class BackupRestoreCoordinator: ObservableObject {
                     do { try FileManager.default.copyItem(at: coordinated, to: local) } catch { copyError = error }
                 }
                 if let error = coordinationError ?? copyError as NSError? { throw error }
-                let decoded = try BackupArchive.open(local, into: scratch.appendingPathComponent("snapshot"), password: password,
+                let opened = try BackupArchive.open(local, into: scratch.appendingPathComponent("snapshot"), password: password,
                     progress: { amount in Task { @MainActor in self.bytes = amount } }, cancelled: { token.cancelled })
+                let decoded = try BackupSnapshotBuilder.portableImport(opened)
                 try BackupSnapshotProvider.validate(decoded)
                 success = true; return (scratch, decoded)
             }.value
@@ -154,10 +162,6 @@ final class BackupRestoreCoordinator: ObservableObject {
         defer { busy = false; committing = false; clearPreview() }
         let password = previewPassword
         do {
-            // This marker remains even after a process crash between commit and the review UI.
-            UserDefaults.standard.set(true, forKey: Self.reviewKey)
-            guard UserDefaults.standard.synchronize() else { throw BackupError.invalid("review marker failed") }
-            needsReview = true
             try await Task.detached {
                 try FileManager.default.createDirectory(at: Self.control, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
                 // Retain old recovery archives; never overwrite a previous rollback package.
@@ -168,6 +172,7 @@ final class BackupRestoreCoordinator: ObservableObject {
                 try BackupSnapshotProvider.validate(snapshot)
                 try transaction.apply(snapshot, rollback: Self.rollback, password: password)
             }.value
+            needsReview = true
             message = L10n.tr("恢复完成。请确认迁移注意事项，再退出维护模式。")
         } catch { fail(error) }
     }
@@ -179,7 +184,9 @@ final class BackupRestoreCoordinator: ObservableObject {
             try await Task.detached {
                 try BackupRestoreTransaction(root: Self.root, journal: Self.journal, settings: BackupSettingsAdapter(), credentials: BackupCredentialAdapter()).recover(rollback: Self.rollback, password: password)
             }.value
-            needsRecovery = false
+            needsRecovery = Self.recoveryRequired
+            needsReview = (try? BackupRestoreTransaction.outcome(at: Self.journal)) == .committed
+            guard !needsRecovery else { throw BackupError.invalid("restore outcome needs recovery") }
             message = L10n.tr("原数据已恢复。")
         } catch { fail(error) }
     }
@@ -187,7 +194,7 @@ final class BackupRestoreCoordinator: ObservableObject {
         #if DEBUG
         if Self.root.path.hasPrefix("/private/tmp/CellDock-UI-") { NSApp.terminate(nil); return }
         #endif
-        guard !busy, !needsRecovery else { return }
+        guard !busy, !needsRecovery, !Self.recoveryRequired else { return }
         do {
             if needsReview {
                 let settings = BackupSettingsAdapter()
@@ -195,6 +202,10 @@ final class BackupRestoreCoordinator: ObservableObject {
                 for key in ["CallRecordingConsentAcknowledged.v1", "CellDockInitialSetupCompleted.v1", "CellDock.modemNetworkServiceRecord", "SelectedInternetModule.v1", "CellularNetworkingModeByModule.v2", "CellularNetworkingPreferencesByModule.v1"] {
                     UserDefaults.standard.removeObject(forKey: key)
                 }
+                guard UserDefaults.standard.synchronize() else { throw BackupError.invalid("migration consent save failed") }
+            }
+            if FileManager.default.fileExists(atPath: Self.control.path) {
+                try BackupRestoreTransaction.acknowledge(at: Self.journal)
             }
             clearPreview()
             UserDefaults.standard.removeObject(forKey: Self.reviewKey)

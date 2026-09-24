@@ -187,6 +187,12 @@ try expectThrows {
 try expect(try Data(contentsOf: target.appendingPathComponent("calls.json")) == oldCalls, "rollback lost old calls")
 try expect(targetCredentials.values.isEmpty, "rollback left credentials")
 try expect(!BackupRestoreTransaction.hasPendingRecovery(at: journal), "rollback left pending journal")
+try expect(try BackupRestoreTransaction.outcome(at: journal) == .rolledBack, "rolled-back restore still requires migration review")
+targetCredentials.deny = true
+try expectThrows { try transaction.apply(captured, rollback: testRoot.appendingPathComponent("denied-rollback"), password: "test-password-123") }
+targetCredentials.deny = false
+try expect(try BackupRestoreTransaction.outcome(at: journal) == .unchanged, "pre-write failure requires migration review")
+try expect(try Data(contentsOf: target.appendingPathComponent("calls.json")) == oldCalls, "pre-write failure changed calls")
 for (index, phase) in ["prepared", "file:calls.json", "settingsApplying", "credential:sms:wecom.webhookURL", "credentialsApplying", "committed"].enumerated() {
     let base = testRoot.appendingPathComponent("crash-\(index)")
     try FileManager.default.createDirectory(at: base.appendingPathComponent("target"), withIntermediateDirectories: true)
@@ -210,6 +216,7 @@ for (index, phase) in ["prepared", "file:calls.json", "settingsApplying", "crede
     try expect(try Data(contentsOf: base.appendingPathComponent("target/calls.json")) == oldCalls, "crash recovery lost old files")
     try expect(try diskCredentials.all().isEmpty, "crash recovery left new credentials")
     try expect(try diskSettings.read() == MemorySettings().read(), "crash recovery lost settings")
+    try expect(try BackupRestoreTransaction.outcome(at: base.appendingPathComponent("journal.json")) == .rolledBack, "explicit recovery kept committed migration state")
     try tx.recover(rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "test-password-123")
 }
 print("Restore transaction and process-crash tests passed")
@@ -236,10 +243,17 @@ try BackupRestoreTransaction(root: fullTarget, journal: testRoot.appendingPathCo
     .apply(fullDecoded, rollback: testRoot.appendingPathComponent("full-rollback"), password: "test-password-123")
 try expect(try fullTargetSettings.read() == fullSettings.read(), "portable settings changed")
 try expect(fullTargetCredentials.values == allCredentials.values, "credentials changed during migration")
+try expect(try BackupRestoreTransaction.outcome(at: testRoot.appendingPathComponent("full-journal")) == .committed, "successful migration lost review requirement")
 for entry in fullDecoded.manifest.files where !["preferences.plist", "credentials.json"].contains(entry.path) {
     try expect(try BackupFiles.hash(fullTarget.appendingPathComponent(entry.path)) == entry.sha256, "restored file hash changed")
 }
 try expect(try String(contentsOf: fullTarget.appendingPathComponent("notes.txt"), encoding: .utf8) == "unmanaged", "unmanaged file overwritten")
+let retainedRollback = try BackupArchive.open(testRoot.appendingPathComponent("full-rollback"), into: testRoot.appendingPathComponent("retained-rollback"), password: "test-password-123", progress: { _ in }, cancelled: { false })
+let portableRollback = try BackupSnapshotBuilder.portableImport(retainedRollback)
+try BackupSnapshotBuilder.validate(portableRollback)
+try BackupRestoreTransaction(root: fullTarget, journal: testRoot.appendingPathComponent("retained-journal"), settings: fullTargetSettings, credentials: fullTargetCredentials)
+    .apply(portableRollback, rollback: testRoot.appendingPathComponent("retained-before"), password: "test-password-123")
+try expect(fullTargetCredentials.values.isEmpty, "retained before-image failed to restore original credentials")
 // Every write boundary is injected, not only the last write in a phase.
 let boundaries = captured.manifest.files.filter { !["preferences.plist", "credentials.json"].contains($0.path) }.map { "file:" + $0.path }
     + BackupPreferences.smsAccounts.map { "credential:sms:" + $0 } + ["settingsApplying"]

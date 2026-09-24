@@ -93,3 +93,15 @@ maintenance, even when LaunchServices omits environment variables. This prevents
 the test wrapper from accidentally starting normal hardware/permission flows.
 Its backup and restore actions are disabled internally; file panels alone can be
 exercised. The production app does not contain this test mode.
+
+Restore completion is recorded durably, separately from the recovery journal.
+Only a committed migration requires disabling imported automation and clearing
+machine-specific network choices. A failed import or successful rollback keeps
+the original machine's settings intact.
+
+Retained encrypted rollback archives may also be selected for manual restoration.
+Their supplemental absent-credential inventory is used for automatic rollback;
+manual import normalizes it to the accounts referenced by the archived settings.
+The encrypted original is not modified. Call history whose recording was already
+deleted remains valid and can be backed up; indexed recordings must still have
+their audio files.

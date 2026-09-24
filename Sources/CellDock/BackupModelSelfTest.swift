@@ -68,6 +68,11 @@ enum BackupModelSelfTest {
               try AVAudioFile(forReading: target.appendingPathComponent("Recordings/stereo.caf")).processingFormat.channelCount == 2 else {
             throw BackupError.invalid("business data or stereo audio changed")
         }
+        // Ordinary recording deletion deliberately leaves history and its old recordingID.
+        try encoder.encode([CallRecordingRecord]()).write(to: source.appendingPathComponent("recordings.json"))
+        try FileManager.default.removeItem(at: audio)
+        let deletedRecording = try BackupSnapshotBuilder.capture(root: source, into: temp.appendingPathComponent("deleted-recording"), settings: Settings(), credentials: Credentials(), appVersion: "test")
+        try BackupSnapshotProvider.validate(deletedRecording)
         try encoder.encode([call, call]).write(to: source.appendingPathComponent("calls.json"))
         let duplicate = try BackupSnapshotBuilder.capture(root: source, into: temp.appendingPathComponent("duplicate"), settings: Settings(), credentials: Credentials(), appVersion: "test")
         do { try BackupSnapshotProvider.validate(duplicate) }

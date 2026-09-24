@@ -58,6 +58,27 @@ public enum BackupPreferences {
 }
 
 public enum BackupSnapshotBuilder {
+    /// Before-images carry supplemental credential states for rollback. For a user-initiated
+    /// import, retain only accounts referenced by the original settings, without changing
+    /// the encrypted recovery package used by automatic journal recovery.
+    public static func portableImport(_ snapshot: BackupSnapshot) throws -> BackupSnapshot {
+        guard snapshot.manifest.appVersion == "rollback" else { try validate(snapshot); return snapshot }
+        try validate(snapshot, allowAdditionalCredentials: true)
+        let values = try BackupPreferences.decode(metadata(snapshot.root.appendingPathComponent("preferences.plist")))
+        let expected = Set(try BackupPreferences.accounts(values).map { $0.0 + ":" + $0.1 })
+        let url = snapshot.root.appendingPathComponent("credentials.json")
+        let secrets = try JSONDecoder().decode([BackupCredential].self, from: metadata(url)).filter { expected.contains($0.namespace + ":" + $0.account) }
+        let data = try JSONEncoder().encode(secrets)
+        try data.write(to: url)
+        let files = try snapshot.manifest.files.map { entry in
+            entry.path == "credentials.json" ? BackupFileEntry(path: entry.path, size: UInt64(data.count), sha256: try BackupFiles.hash(url)) : entry
+        }
+        let result = BackupSnapshot(root: snapshot.root, manifest: BackupManifest(appVersion: snapshot.manifest.appVersion,
+            createdAt: snapshot.manifest.createdAt, files: files, messageCount: snapshot.manifest.messageCount,
+            callCount: snapshot.manifest.callCount, recordingCount: snapshot.manifest.recordingCount))
+        try validate(result)
+        return result
+    }
     public static let dataFiles = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json"]
     public static func capture(root: URL, into staging: URL, settings: BackupSettingsAccess,
                                credentials: BackupCredentialAccess, appVersion: String,

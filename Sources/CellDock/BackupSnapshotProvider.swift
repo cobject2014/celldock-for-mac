@@ -19,10 +19,12 @@ enum BackupSnapshotProvider {
         guard Set(messages.map(\.id)).count == messages.count,
               Set(calls.map(\.id)).count == calls.count,
               Set(recordings.map(\.id)).count == recordings.count else { throw BackupError.invalid("duplicate records") }
-        // A recording can survive deletion of its history entry, but a history link must resolve.
-        let recordingIDs = Set(recordings.map(\.id))
+        // Recording deletion intentionally preserves history and its old recordingID.
+        // Validate links that still resolve; missing audio for indexed recordings remains an error.
+        let recordingsByID = Dictionary(uniqueKeysWithValues: recordings.map { ($0.id, $0) })
         for call in calls {
-            if let id = call.recordingID, !recordingIDs.contains(id) { throw BackupError.invalid("missing recording link") }
+            if let id = call.recordingID, let recording = recordingsByID[id],
+               let linkedCall = recording.callID, linkedCall != call.id { throw BackupError.invalid("mismatched recording link") }
         }
         for recording in recordings {
             guard recording.duration.isFinite, recording.duration >= 0 else { throw BackupError.invalid("invalid recording duration") }

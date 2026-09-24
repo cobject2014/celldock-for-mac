@@ -3,6 +3,26 @@ import Darwin
 
 /// The caller must hold an exclusive maintenance barrier for the entire transaction.
 public struct BackupRestoreTransaction {
+    public enum Outcome: String { case unchanged, committed, rolledBack, acknowledged }
+    public static func outcome(at journal: URL) throws -> Outcome? {
+        let url = journal.appendingPathExtension("outcome")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let value = Outcome(rawValue: String(decoding: try BackupSnapshotBuilder.metadata(url), as: UTF8.self)) else {
+            throw BackupError.invalid("invalid restore outcome")
+        }
+        return value
+    }
+    public static func acknowledge(at journal: URL) throws { try writeOutcome(.acknowledged, at: journal) }
+    private static func writeOutcome(_ outcome: Outcome, at journal: URL) throws {
+        let url = journal.appendingPathExtension("outcome")
+        try Data(outcome.rawValue.utf8).write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let file = try FileHandle(forWritingTo: url); try file.synchronize(); try file.close()
+        let descriptor = Darwin.open(url.deletingLastPathComponent().path, O_RDONLY)
+        guard descriptor >= 0 else { throw BackupError.invalid("outcome sync failed") }
+        defer { Darwin.close(descriptor) }
+        guard fsync(descriptor) == 0 else { throw BackupError.invalid("outcome sync failed") }
+    }
     private struct Journal: Codable {
         var phase: String
         let rollback: String
@@ -22,6 +42,7 @@ public struct BackupRestoreTransaction {
     public func apply(_ verified: BackupSnapshot, rollback: URL, password: String,
                       checkpoint: (String) throws -> Void = { _ in }) throws {
         guard !Self.hasPendingRecovery(at: journal) else { throw BackupError.busy }
+        try Self.writeOutcome(.unchanged, at: journal)
         try BackupSnapshotBuilder.validate(verified)
         let incoming = try secrets(verified)
         let temporary = try BackupFiles.privateDirectory()
@@ -40,6 +61,7 @@ public struct BackupRestoreTransaction {
             try checkpoint("prepared")
             try install(verified, record: &record, checkpoint: checkpoint)
             record.phase = "committed"; try save(record); try checkpoint("committed")
+            try Self.writeOutcome(.committed, at: journal)
             try FileManager.default.removeItem(at: journal)
             try syncDirectory(journal.deletingLastPathComponent())
         } catch {
@@ -66,6 +88,7 @@ public struct BackupRestoreTransaction {
               Set(before.manifest.files.map(\.path).filter { $0 != "preferences.plist" && $0 != "credentials.json" }).isSubset(of: Set(record.paths)) else { throw BackupError.invalid("invalid rollback inventory") }
         record.phase = "rollingBack"; try save(record)
         try install(before, record: &record, checkpoint: { _ in })
+        try Self.writeOutcome(.rolledBack, at: journal)
         try FileManager.default.removeItem(at: journal)
         try syncDirectory(journal.deletingLastPathComponent())
     }
