@@ -1712,6 +1712,8 @@
 "系统权限、登录启动、USB 和网络绑定不会迁移；不会修改 SIM 或模块固件。" = "Les autorisations système, le démarrage automatique et les associations USB/réseau ne sont pas transférés. La SIM et le micrologiciel restent inchangés.";
 "备份密码（至少 12 个字符）" = "Mot de passe (12 caractères minimum)";
 "创建备份时再次输入密码" = "Confirmer le mot de passe de la sauvegarde";
+"密码不足 12 个字符，暂时无法创建备份。" = "Le mot de passe contient moins de 12 caractères. La sauvegarde est indisponible.";
+"两次密码不一致，请再次输入相同的密码。" = "Les mots de passe ne correspondent pas. Saisissez à nouveau le même mot de passe.";
 "请妥善保存密码，遗失后无法恢复。备份中包含敏感信息，请勿分享。" = "Conservez le mot de passe : il est irrécupérable. Les sauvegardes contiennent des données sensibles ; ne les partagez pas.";
 "选择目录并备份…" = "Choisir un dossier et sauvegarder…";
 "选择备份并预览…" = "Choisir une sauvegarde et prévisualiser…";

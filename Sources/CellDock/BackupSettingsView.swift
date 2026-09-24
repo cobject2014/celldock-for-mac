@@ -16,8 +16,12 @@ struct BackupSettingsView: View {
                 Text(L10n.tr("维护模式中已暂停通信。备份包含短信、通话、原始录音、音效、可迁移设置和转发凭据。"))
                 Text(L10n.tr("系统权限、登录启动、USB 和网络绑定不会迁移；不会修改 SIM 或模块固件。"))
                     .foregroundStyle(.secondary)
+                Text(L10n.tr("备份密码（至少 12 个字符）"))
+                    .font(.callout)
                 SecureField(L10n.tr("备份密码（至少 12 个字符）"), text: $password)
                 if !coordinator.needsRecovery && !coordinator.needsReview && coordinator.preview == nil {
+                    Text(L10n.tr("创建备份时再次输入密码"))
+                        .font(.callout)
                     SecureField(L10n.tr("创建备份时再次输入密码"), text: $confirmation)
                     Text(L10n.tr("请妥善保存密码，遗失后无法恢复。备份中包含敏感信息，请勿分享。"))
                         .font(.caption).foregroundStyle(.secondary)
@@ -26,6 +30,13 @@ struct BackupSettingsView: View {
                             .disabled(password.count < 12 || password != confirmation)
                         Button(L10n.tr("选择备份并预览…")) { chooseArchive() }
                             .disabled(password.isEmpty)
+                    }
+                    if !password.isEmpty && password.count < 12 {
+                        Text(L10n.tr("密码不足 12 个字符，暂时无法创建备份。"))
+                            .font(.caption).foregroundStyle(.orange)
+                    } else if !password.isEmpty && password != confirmation {
+                        Text(L10n.tr("两次密码不一致，请再次输入相同的密码。"))
+                            .font(.caption).foregroundStyle(.orange)
                     }
                 }
                 if let preview = coordinator.preview {

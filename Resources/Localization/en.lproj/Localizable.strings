@@ -1715,6 +1715,8 @@
 "系统权限、登录启动、USB 和网络绑定不会迁移；不会修改 SIM 或模块固件。" = "System permissions, login startup, USB and network bindings are not migrated. SIM and modem firmware are never modified.";
 "备份密码（至少 12 个字符）" = "Backup password (at least 12 characters)";
 "创建备份时再次输入密码" = "Confirm password for a new backup";
+"密码不足 12 个字符，暂时无法创建备份。" = "The password is shorter than 12 characters. Backup is not yet available.";
+"两次密码不一致，请再次输入相同的密码。" = "The passwords do not match. Enter the same password again.";
 "请妥善保存密码，遗失后无法恢复。备份中包含敏感信息，请勿分享。" = "Keep your password safe: a lost password cannot be recovered. Backups contain sensitive data; do not share them.";
 "选择目录并备份…" = "Choose Folder & Back Up…";
 "选择备份并预览…" = "Choose Backup & Preview…";
