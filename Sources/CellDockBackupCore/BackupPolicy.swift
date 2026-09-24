@@ -3,7 +3,7 @@ import Foundation
 public enum BackupPolicy {
     public static let maxManifest = 16 * 1024 * 1024
     public static let maxBytes: UInt64 = 1 << 40
-    public static let rootFiles: Set<String> = ["messages.json", "calls.json", "recordings.json", "deleted-message-ids.json", "preferences.plist", "credentials.json"]
+    public static let rootFiles: Set<String> = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json", "preferences.plist", "credentials.json"]
     public static func validateRelativePath(_ path: String) throws {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !path.isEmpty, path.utf8.count <= 1024, !path.contains("\\"),

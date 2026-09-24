@@ -12,6 +12,7 @@ enum BackupSnapshotProvider {
             return try decoder.decode(type, from: Data(contentsOf: url))
         }
         let messages = try decode([SMSMessage].self, "messages.json") ?? []
+        _ = try decode([SMSMessage].self, "messages.backup.json")
         let calls = try decode([CallHistoryRecord].self, "calls.json") ?? []
         let recordings = try decode([CallRecordingRecord].self, "recordings.json") ?? []
         _ = try decode([SMSMessage.ID: Date].self, "deleted-message-ids.json")

@@ -58,9 +58,10 @@ public enum BackupPreferences {
 }
 
 public enum BackupSnapshotBuilder {
-    public static let dataFiles = ["messages.json", "calls.json", "recordings.json", "deleted-message-ids.json"]
+    public static let dataFiles = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json"]
     public static func capture(root: URL, into staging: URL, settings: BackupSettingsAccess,
-                               credentials: BackupCredentialAccess, appVersion: String) throws -> BackupSnapshot {
+                               credentials: BackupCredentialAccess, appVersion: String,
+                               additionalAccounts: [(String, String)] = []) throws -> BackupSnapshot {
         guard !FileManager.default.fileExists(atPath: staging.path) else { throw BackupError.invalid("snapshot exists") }
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         var success = false
@@ -68,7 +69,8 @@ public enum BackupSnapshotBuilder {
         let preferences = try settings.read()
         let values = try BackupPreferences.decode(preferences)
         var secrets: [BackupCredential] = []
-        for (namespace, account) in try BackupPreferences.accounts(values) {
+        var seenAccounts = Set<String>()
+        for (namespace, account) in try BackupPreferences.accounts(values) + additionalAccounts where seenAccounts.insert(namespace + ":" + account).inserted {
             secrets.append(BackupCredential(namespace: namespace, account: account, value: try credentials.read(namespace: namespace, account: account)))
         }
         try preferences.write(to: staging.appendingPathComponent("preferences.plist"))
@@ -102,7 +104,7 @@ public enum BackupSnapshotBuilder {
         let snapshot = BackupSnapshot(root: staging, manifest: BackupManifest(appVersion: appVersion, files: entries,
             messageCount: try rows(staging, "messages.json").count, callCount: try rows(staging, "calls.json").count,
             recordingCount: try rows(staging, "recordings.json").count))
-        try validate(snapshot)
+        try validate(snapshot, allowAdditionalCredentials: !additionalAccounts.isEmpty)
         success = true
         return snapshot
     }
@@ -116,7 +118,7 @@ public enum BackupSnapshotBuilder {
         guard try (url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 64 * 1024 * 1024 else { throw BackupError.invalid("metadata too large") }
         return try Data(contentsOf: url)
     }
-    public static func validate(_ snapshot: BackupSnapshot) throws {
+    public static func validate(_ snapshot: BackupSnapshot, allowAdditionalCredentials: Bool = false) throws {
         try BackupPolicy.validateManifest(snapshot.manifest)
         let paths = Set(snapshot.manifest.files.map(\.path))
         guard paths.contains("preferences.plist"), paths.contains("credentials.json") else { throw BackupError.invalid("incomplete snapshot") }
@@ -133,7 +135,7 @@ public enum BackupSnapshotBuilder {
             try BackupPreferences.validateCredential(item)
             guard seen.insert(item.namespace + ":" + item.account).inserted else { throw BackupError.invalid("duplicate credential") }
         }
-        guard expected == seen else { throw BackupError.invalid("credential inventory mismatch") }
+        guard allowAdditionalCredentials ? expected.isSubset(of: seen) : expected == seen else { throw BackupError.invalid("credential inventory mismatch") }
         let messages = try rows(snapshot.root, "messages.json"), calls = try rows(snapshot.root, "calls.json"), recordings = try rows(snapshot.root, "recordings.json")
         guard messages.count == snapshot.manifest.messageCount, calls.count == snapshot.manifest.callCount,
               recordings.count == snapshot.manifest.recordingCount else { throw BackupError.invalid("record count mismatch") }

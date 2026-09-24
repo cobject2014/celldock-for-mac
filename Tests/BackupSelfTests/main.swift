@@ -1,6 +1,37 @@
 import Foundation
 import CryptoKit
 import CellDockBackupCore
+import Darwin
+
+// Child process exits without unwinding at an injected durable transaction boundary.
+if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--crash-restore" {
+    let base = URL(fileURLWithPath: CommandLine.arguments[2])
+    let fixture = try JSONDecoder().decode(BackupManifest.self, from: Data(contentsOf: base.appendingPathComponent("manifest.json")))
+    let snapshot = BackupSnapshot(root: base.appendingPathComponent("incoming"), manifest: fixture)
+    let transaction = BackupRestoreTransaction(root: base.appendingPathComponent("target"), journal: base.appendingPathComponent("journal.json"),
+        settings: DiskSettings(base.appendingPathComponent("settings.plist")), credentials: DiskCredentials(base.appendingPathComponent("credentials.json")))
+    try transaction.apply(snapshot, rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "test-password-123", checkpoint: {
+        if $0 == CommandLine.arguments[3] { Darwin._exit(77) }
+    })
+    Darwin.exit(0)
+}
+
+struct DiskSettings: BackupSettingsAccess {
+    let url: URL
+    init(_ url: URL) { self.url = url }
+    func read() throws -> Data { try Data(contentsOf: url) }
+    func replace(with data: Data) throws { try data.write(to: url, options: .atomic) }
+}
+struct DiskCredentials: BackupCredentialAccess {
+    let url: URL
+    init(_ url: URL) { self.url = url }
+    func all() throws -> [String: Data] { try JSONDecoder().decode([String: Data].self, from: Data(contentsOf: url)) }
+    func read(namespace: String, account: String) throws -> Data? { try all()[namespace + ":" + account] }
+    func write(_ value: Data?, namespace: String, account: String) throws {
+        var values = try all(); values[namespace + ":" + account] = value
+        try JSONEncoder().encode(values).write(to: url, options: .atomic)
+    }
+}
 
 struct TestFailure: Error { let message: String }
 func expect(_ value: Bool, _ message: String) throws {
@@ -100,6 +131,50 @@ credentials.deny = false
 let forbidden = try MemorySettings(["CellDock.modemNetworkServiceRecord": "source-machine"])
 try expectThrows { _ = try BackupPreferences.decode(forbidden.read()) }
 print("Snapshot and credential tests passed")
+// Fault injection must restore both old files and absence of newly introduced credentials.
+let target = testRoot.appendingPathComponent("target")
+try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+let oldCalls = Data("[]".utf8)
+try oldCalls.write(to: target.appendingPathComponent("calls.json"))
+let targetSettings = try MemorySettings()
+let targetCredentials = MemoryCredentials()
+let journal = testRoot.appendingPathComponent("journal.json")
+let rollback = testRoot.appendingPathComponent("rollback.celldockbackup")
+let transaction = BackupRestoreTransaction(root: target, journal: journal, settings: targetSettings, credentials: targetCredentials)
+try expectThrows {
+    try transaction.apply(captured, rollback: rollback, password: "test-password-123", checkpoint: { stage in
+        if stage == "credentialsApplying" { throw CocoaError(.fileWriteOutOfSpace) }
+    })
+}
+try expect(try Data(contentsOf: target.appendingPathComponent("calls.json")) == oldCalls, "rollback lost old calls")
+try expect(targetCredentials.values.isEmpty, "rollback left credentials")
+try expect(!BackupRestoreTransaction.hasPendingRecovery(at: journal), "rollback left pending journal")
+for (index, phase) in ["prepared", "file:calls.json", "settingsApplying", "credential:sms:wecom.webhookURL", "credentialsApplying", "committed"].enumerated() {
+    let base = testRoot.appendingPathComponent("crash-\(index)")
+    try FileManager.default.createDirectory(at: base.appendingPathComponent("target"), withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: captured.root, to: base.appendingPathComponent("incoming"))
+    try JSONEncoder().encode(captured.manifest).write(to: base.appendingPathComponent("manifest.json"))
+    try oldCalls.write(to: base.appendingPathComponent("target/calls.json"))
+    let diskSettings = DiskSettings(base.appendingPathComponent("settings.plist"))
+    try diskSettings.replace(with: MemorySettings().read())
+    try JSONEncoder().encode([String: Data]()).write(to: base.appendingPathComponent("credentials.json"))
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+    process.arguments = ["--crash-restore", base.path, phase]
+    try process.run(); process.waitUntilExit()
+    try expect(process.terminationStatus == 77, "child did not crash at requested phase")
+    let diskCredentials = DiskCredentials(base.appendingPathComponent("credentials.json"))
+    let tx = BackupRestoreTransaction(root: base.appendingPathComponent("target"), journal: base.appendingPathComponent("journal.json"), settings: diskSettings, credentials: diskCredentials)
+    let beforeWrongPassword = try Data(contentsOf: base.appendingPathComponent("target/calls.json"))
+    try expectThrows { try tx.recover(rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "wrong-password") }
+    try expect(try Data(contentsOf: base.appendingPathComponent("target/calls.json")) == beforeWrongPassword, "wrong password mutated data")
+    try tx.recover(rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "test-password-123")
+    try expect(try Data(contentsOf: base.appendingPathComponent("target/calls.json")) == oldCalls, "crash recovery lost old files")
+    try expect(try diskCredentials.all().isEmpty, "crash recovery left new credentials")
+    try expect(try diskSettings.read() == MemorySettings().read(), "crash recovery lost settings")
+    try tx.recover(rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "test-password-123")
+}
+print("Restore transaction and process-crash tests passed")
 let portableSource = testRoot.appendingPathComponent("portable-source")
 try FileManager.default.createDirectory(at: portableSource.appendingPathComponent("Sounds"), withIntermediateDirectories: true)
 try Data("tone".utf8).write(to: portableSource.appendingPathComponent("Sounds/custom.aiff"))
