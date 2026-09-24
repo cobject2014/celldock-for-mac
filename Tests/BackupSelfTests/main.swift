@@ -70,6 +70,51 @@ try expect(!FileManager.default.fileExists(atPath: cancelledURL.path), "cancelle
 try expectThrows { try BackupArchive.seal(fixture, to: encrypted, password: "test-password-123", progress: { _ in }, cancelled: { false }) }
 try expect(try Data(contentsOf: encrypted) == sealed, "existing archive overwritten")
 print("Backup archive tests passed")
+final class MemorySettings: BackupSettingsAccess {
+    var data: Data
+    init(_ values: [String: Any] = [:]) throws { data = try PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0) }
+    func read() throws -> Data { data }
+    func replace(with encodedSettings: Data) throws { data = encodedSettings }
+}
+final class MemoryCredentials: BackupCredentialAccess {
+    var values: [String: Data] = [:]
+    var deny = false
+    func read(namespace: String, account: String) throws -> Data? {
+        if deny { throw CocoaError(.fileReadNoPermission) }
+        return values[namespace + ":" + account]
+    }
+    func write(_ value: Data?, namespace: String, account: String) throws { values[namespace + ":" + account] = value }
+}
+let settings = try MemorySettings(["AutomaticallyAnswerCalls.v1": true, "AutomaticAnswerDelay.v1": 3])
+let credentials = MemoryCredentials()
+credentials.values["sms:wecom.webhookURL"] = Data("test-secret".utf8)
+let captured = try BackupSnapshotBuilder.capture(root: source, into: testRoot.appendingPathComponent("snapshot"),
+    settings: settings, credentials: credentials, appVersion: "test")
+try BackupSnapshotBuilder.validate(captured)
+try expect(captured.manifest.callCount == 1, "call count mismatch")
+let capturedSecrets = try JSONDecoder().decode([BackupCredential].self, from: Data(contentsOf: captured.root.appendingPathComponent("credentials.json")))
+try expect(capturedSecrets.first(where: { $0.account == "wecom.webhookURL" })?.value == Data("test-secret".utf8), "credential missing")
+credentials.deny = true
+try expectThrows { _ = try BackupSnapshotBuilder.capture(root: source, into: testRoot.appendingPathComponent("denied"), settings: settings, credentials: credentials, appVersion: "test") }
+credentials.deny = false
+let forbidden = try MemorySettings(["CellDock.modemNetworkServiceRecord": "source-machine"])
+try expectThrows { _ = try BackupPreferences.decode(forbidden.read()) }
+print("Snapshot and credential tests passed")
+let portableSource = testRoot.appendingPathComponent("portable-source")
+try FileManager.default.createDirectory(at: portableSource.appendingPathComponent("Sounds"), withIntermediateDirectories: true)
+try Data("tone".utf8).write(to: portableSource.appendingPathComponent("Sounds/custom.aiff"))
+let portableMessages = Data("[{\"id\":\"sms-1\",\"isRead\":true,\"body\":\"中文\"}]".utf8)
+try portableMessages.write(to: portableSource.appendingPathComponent("messages.json"))
+let deletedIDs = Data("{\"deleted-1\":\"2026-09-24T00:00:00Z\"}".utf8)
+try deletedIDs.write(to: portableSource.appendingPathComponent("deleted-message-ids.json"))
+let portableSettings = try MemorySettings(["CellDock.AlertSound.message.customFile.v1": "custom.aiff"])
+credentials.values["sms:feishu.secret"] = Data()
+let portable = try BackupSnapshotBuilder.capture(root: portableSource, into: testRoot.appendingPathComponent("portable"), settings: portableSettings, credentials: credentials, appVersion: "test")
+try expect(try Data(contentsOf: portable.root.appendingPathComponent("messages.json")) == portableMessages, "message state changed")
+try expect(try Data(contentsOf: portable.root.appendingPathComponent("deleted-message-ids.json")) == deletedIDs, "tombstones changed")
+try expect(portable.manifest.files.contains { $0.path == "Sounds/custom.aiff" }, "sound omitted")
+let portableSecrets = try JSONDecoder().decode([BackupCredential].self, from: Data(contentsOf: portable.root.appendingPathComponent("credentials.json")))
+try expect(portableSecrets.first { $0.account == "feishu.secret" }?.value == Data(), "empty secret conflated with absence")
 // Authentication must also reject reordered/duplicated frames and a valid prefix without its end marker.
 var frames: [Data] = []
 var cursor = 36

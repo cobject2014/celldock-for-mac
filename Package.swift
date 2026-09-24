@@ -77,6 +77,7 @@ let package = Package(
         .executableTarget(
             name: "CellDock",
             dependencies: [
+                "CellDockBackupCore",
                 "CModemBridge",
                 "CUACProbe",
                 "CEuiccCore",
