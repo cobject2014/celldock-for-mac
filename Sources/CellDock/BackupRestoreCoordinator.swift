@@ -10,7 +10,7 @@ private final class BackupCancellation: @unchecked Sendable {
 }
 
 @MainActor
-final class BackupRestoreCoordinator: ObservableObject {
+final class BackupRestoreCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     static let shared = BackupRestoreCoordinator()
     static let maintenanceKey = "CellDock.BackupMaintenance.v1"
     static let reviewKey = "CellDock.RestoreReviewRequired.v1"
@@ -54,12 +54,16 @@ final class BackupRestoreCoordinator: ObservableObject {
     private var previewDirectory: URL?
     private var cancellation = BackupCancellation()
     private var window: NSWindow?
+    var resumeApplication: (() -> Void)?
+    @Published var acceptsMigration = false
+    private let exitTransition = BackupMaintenanceExit()
     var presentationWindow: NSWindow? { window }
 
     func showWindow() {
         if window == nil {
             let value = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 650),
-                styleMask: [.titled, .resizable, .miniaturizable], backing: .buffered, defer: false)
+                styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+            value.delegate = self
             value.title = L10n.tr("备份与恢复")
             value.contentMinSize = NSSize(width: 560, height: 480)
             value.contentView = NSHostingView(rootView: BackupSettingsView().cellDockLanguageEnvironment())
@@ -194,8 +198,11 @@ final class BackupRestoreCoordinator: ObservableObject {
         #if DEBUG
         if Self.root.path.hasPrefix("/private/tmp/CellDock-UI-") { NSApp.terminate(nil); return }
         #endif
-        guard !busy, !needsRecovery, !Self.recoveryRequired else { return }
+        guard let resumeApplication else { return }
         do {
+            try exitTransition.finish(busy: busy || window?.attachedSheet != nil,
+                recoveryRequired: needsRecovery || Self.recoveryRequired,
+                reviewRequired: needsReview, reviewAccepted: acceptsMigration, prepare: {
             if needsReview {
                 for (path, nested) in [("CallTranscriptions/settings.json", false), ("CallWelcome/welcome.json", true)] {
                     let url = Self.root.appendingPathComponent(path)
@@ -222,7 +229,18 @@ final class BackupRestoreCoordinator: ObservableObject {
             UserDefaults.standard.removeObject(forKey: Self.reviewKey)
             UserDefaults.standard.removeObject(forKey: Self.maintenanceKey)
             guard UserDefaults.standard.synchronize() else { throw BackupError.invalid("finish failed") }
-            NSApp.terminate(nil)
+            }, resume: {
+                window?.orderOut(nil)
+                window?.close()
+                window = nil
+                needsReview = false
+                resumeApplication()
+            })
         } catch { fail(error) }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        finish()
+        return false // finish closes the window only after the same safety checks as the button.
     }
 }

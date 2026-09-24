@@ -1,5 +1,23 @@
 import Foundation
 
+/// Serial UI transition: durable preparation must succeed before business services resume.
+public final class BackupMaintenanceExit {
+    private var finishing = false
+    private var finished = false
+    public init() {}
+    @discardableResult
+    public func finish(busy: Bool, recoveryRequired: Bool, reviewRequired: Bool, reviewAccepted: Bool,
+                       prepare: () throws -> Void, resume: () -> Void) throws -> Bool {
+        guard !busy, !recoveryRequired, !reviewRequired || reviewAccepted, !finishing, !finished else { return false }
+        finishing = true
+        defer { finishing = false }
+        try prepare()
+        finished = true
+        resume()
+        return true
+    }
+}
+
 public enum BackupMaintenancePolicy {
     public static func inactiveConfiguration(_ data: Data, nested: Bool) throws -> Data {
         guard var value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw BackupError.invalid("invalid automation configuration") }

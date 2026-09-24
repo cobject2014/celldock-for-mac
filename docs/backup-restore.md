@@ -2,7 +2,11 @@
 
 In **Settings → Backup & Restore**, choose maintenance mode, quit, then reopen
 CellDock. Communications are stopped in maintenance mode; no modem services or
-business stores are constructed. Finish and reopen again to resume normal use.
+business stores are constructed. Choose **Done, return to CellDock** (or close the
+maintenance window) to resume normal use in the same process; no manual restart
+is needed. The same safety checks block both actions during active operations or
+unfinished recovery. After a successful restore, acknowledge migration settings
+before returning; business stores then load the restored data for the first time.
 
 ## Create a backup
 

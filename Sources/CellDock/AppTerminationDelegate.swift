@@ -1,19 +1,30 @@
 import AppKit
 import Foundation
+import Combine
 
 @MainActor
-final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
+final class AppTerminationDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private lazy var updaterManager = UpdaterManager.shared
     private var menuBarPanelController: MenuBarPanelController?
-    private weak var appState: AppState?
+    @Published private(set) var appState: AppState?
     private var didFinishLaunching = false
     private var didShowInitialCommunicationWindow = false
     private var didScheduleStartupPermissionRequest = false
+
+    func startNormalMode() {
+        guard appState == nil, !BackupRestoreCoordinator.maintenanceRequired else { return }
+        AppIdentityMigration.migratePreferencesIfNeeded()
+        let state = AppState()
+        state.start()
+        configure(appState: state)
+    }
 
     func configure(appState: AppState) {
         self.appState = appState
         menuBarPanelController = MenuBarPanelController(appState: appState)
         if didFinishLaunching {
+            AppAppearanceMode.storedPreference.apply()
+            updaterManager.start()
             menuBarPanelController?.start()
             showInitialCommunicationWindowIfNeeded()
             scheduleStartupPermissionRequestIfNeeded()
@@ -21,13 +32,13 @@ final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        didFinishLaunching = true
         if BackupRestoreCoordinator.maintenanceRequired && appState == nil {
             BackupRestoreCoordinator.shared.showWindow()
             return
         }
         AppAppearanceMode.storedPreference.apply()
         updaterManager.start()
-        didFinishLaunching = true
         menuBarPanelController?.start()
         showInitialCommunicationWindowIfNeeded()
         scheduleStartupPermissionRequestIfNeeded()

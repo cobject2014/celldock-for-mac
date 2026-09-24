@@ -1710,6 +1710,7 @@
 "自动接听 · 仅听" = "Auto-answered · Listen only";
 "回放时双耳混音，原始文件保留左右分轨" = "Playback mixes both tracks to both ears; original files retain separate channels";
 "备份与恢复" = "Backup & Restore";
+"完成，返回 CellDock" = "Done, return to CellDock";
 "加密备份与跨 Mac 恢复" = "Encrypted backups and Mac migration";
 "维护模式中已暂停通信。备份包含短信、通话、原始录音、音效、可迁移设置和转发凭据。" = "Communications are paused in maintenance mode. Backups include messages, calls, original recordings, sounds, portable settings and forwarding credentials.";
 "系统权限、登录启动、USB 和网络绑定不会迁移；不会修改 SIM 或模块固件。" = "System permissions, login startup, USB and network bindings are not migrated. SIM and modem firmware are never modified.";

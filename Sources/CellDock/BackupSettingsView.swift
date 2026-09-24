@@ -6,7 +6,6 @@ struct BackupSettingsView: View {
     @State private var password = ""
     @State private var confirmation = ""
     @State private var confirmsRestore = false
-    @State private var acceptsMigration = false
     @State private var choosingLocation = false
 
     var body: some View {
@@ -57,7 +56,7 @@ struct BackupSettingsView: View {
                     }.disabled(password.isEmpty)
                 }
                 if coordinator.needsReview && !coordinator.needsRecovery {
-                    Toggle(L10n.tr("我了解：自动接听、自动录音、自动删除、短信转发和代理将保持关闭，需在目标 Mac 重新确认开启。"), isOn: $acceptsMigration)
+                    Toggle(L10n.tr("我了解：自动接听、自动录音、自动删除、短信转发和代理将保持关闭，需在目标 Mac 重新确认开启。"), isOn: $coordinator.acceptsMigration)
                     Text(L10n.tr("请重新检查模块路由及系统权限。历史短信不会作为新短信转发。"))
                 }
                 if coordinator.busy {
@@ -71,8 +70,8 @@ struct BackupSettingsView: View {
                 Button(L10n.tr("在 Finder 中查看本机加密回滚备份")) {
                     NSWorkspace.shared.open(BackupRestoreCoordinator.control)
                 }
-                Button(L10n.tr("完成并退出（请重新打开 CellDock）")) { coordinator.finish() }
-                    .disabled(coordinator.busy || coordinator.needsRecovery || (coordinator.needsReview && !acceptsMigration))
+                Button(L10n.tr("完成，返回 CellDock")) { coordinator.finish() }
+                    .disabled(coordinator.busy || coordinator.needsRecovery || (coordinator.needsReview && !coordinator.acceptsMigration))
             }
             .padding(28)
             .disabled(coordinator.busy || choosingLocation) // Cancellation remains available below.

@@ -83,6 +83,22 @@ try expectThrows { try BackupPolicy.validateManifest(manifest([entry], version: 
 try expectThrows { try BackupPolicy.validateManifest(manifest([BackupFileEntry(path: "calls.json", size: UInt64.max, sha256: entry.sha256)])) }
 try expectThrows { try BackupPolicy.validateManifest(manifest([BackupFileEntry(path: "calls.json", size: 0, sha256: "bad")])) }
 print("Backup policy tests passed")
+// Leaving maintenance must prepare durable state before resuming, exactly once.
+let exitFlow = BackupMaintenanceExit()
+var exitEvents: [String] = []
+for blocked in [(true, false, false, false), (false, true, false, false), (false, false, true, false)] {
+    try expect(try !exitFlow.finish(busy: blocked.0, recoveryRequired: blocked.1, reviewRequired: blocked.2, reviewAccepted: blocked.3,
+        prepare: { exitEvents.append("prepare") }, resume: { exitEvents.append("resume") }), "unsafe maintenance exit allowed")
+}
+try expect(exitEvents.isEmpty, "blocked exit changed state")
+try expectThrows { _ = try exitFlow.finish(busy: false, recoveryRequired: false, reviewRequired: false, reviewAccepted: false,
+    prepare: { throw CocoaError(.fileWriteOutOfSpace) }, resume: { exitEvents.append("resume") }) }
+try expect(exitEvents.isEmpty, "failed preparation resumed communication")
+try expect(try exitFlow.finish(busy: false, recoveryRequired: false, reviewRequired: true, reviewAccepted: true,
+    prepare: { exitEvents.append("prepare") }, resume: { exitEvents.append("resume") }), "completed backup cannot return")
+_ = try exitFlow.finish(busy: false, recoveryRequired: false, reviewRequired: false, reviewAccepted: false,
+    prepare: { exitEvents.append("duplicate") }, resume: { exitEvents.append("duplicate") })
+try expect(exitEvents == ["prepare", "resume"], "maintenance resumed out of order or more than once")
 try expect(BackupMaintenancePolicy.canEnter(activeOperations: []), "idle maintenance rejected")
 try expect(!BackupMaintenancePolicy.canEnter(activeOperations: [false, true, false]), "secondary busy operation ignored")
 let unsafePreferences = try PropertyListSerialization.data(fromPropertyList: [

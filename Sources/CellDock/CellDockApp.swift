@@ -5,23 +5,20 @@ import SwiftUI
 @main
 struct CellDockApp: App {
     @NSApplicationDelegateAdaptor(AppTerminationDelegate.self) private var appDelegate
-    private let appState: AppState?
+    private var appState: AppState? { appDelegate.appState }
 
     init() {
         #if DEBUG
         BackupModelSelfTest.runIfRequested()
         #endif
         ModuleMaintenanceCLI.runIfRequested()
+        let delegate = appDelegate
+        BackupRestoreCoordinator.shared.resumeApplication = { delegate.startNormalMode() }
         if BackupRestoreCoordinator.maintenanceRequired {
-            appState = nil
             DispatchQueue.main.async { BackupRestoreCoordinator.shared.showWindow() }
             return
         }
-        AppIdentityMigration.migratePreferencesIfNeeded()
-        let state = AppState()
-        appState = state
-        state.start()
-        appDelegate.configure(appState: state)
+        appDelegate.startNormalMode()
     }
 
     var body: some Scene {
