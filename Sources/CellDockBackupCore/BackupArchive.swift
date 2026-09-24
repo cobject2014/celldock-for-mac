@@ -43,10 +43,12 @@ public enum BackupArchive {
             var offset: UInt64 = 0
             var hash = SHA256()
             while offset < entry.size {
-                let data = try exact(reader, Int(min(UInt64(chunkSize), entry.size - offset)))
-                hash.update(data: data)
-                try frame(1, bytes(UInt32(index)) + bytes(offset) + data)
-                offset += UInt64(data.count); total += UInt64(data.count); progress(total)
+                try autoreleasepool {
+                    let data = try exact(reader, Int(min(UInt64(chunkSize), entry.size - offset)))
+                    hash.update(data: data)
+                    try frame(1, bytes(UInt32(index)) + bytes(offset) + data)
+                    offset += UInt64(data.count); total += UInt64(data.count); progress(total)
+                }
             }
             guard try reader.read(upToCount: 1)?.isEmpty != false,
                   hex(hash.finalize()) == entry.sha256 else { throw BackupError.invalid("source changed") }
@@ -110,14 +112,16 @@ public enum BackupArchive {
             var hash = SHA256()
             var offset: UInt64 = 0
             while offset < entry.size {
-                let expectedCount = Int(min(UInt64(chunkSize), entry.size - offset))
-                let data = try frame(1, length: expectedCount + 12)
-                guard number(data.prefix(4)) == UInt64(index), number(data.subdata(in: 4..<12)) == offset else {
-                    throw BackupError.invalid("entry offset mismatch")
+                try autoreleasepool {
+                    let expectedCount = Int(min(UInt64(chunkSize), entry.size - offset))
+                    let data = try frame(1, length: expectedCount + 12)
+                    guard number(data.prefix(4)) == UInt64(index), number(data.subdata(in: 4..<12)) == offset else {
+                        throw BackupError.invalid("entry offset mismatch")
+                    }
+                    let payload = data.dropFirst(12)
+                    try writer.write(contentsOf: payload); hash.update(data: payload)
+                    offset += UInt64(payload.count); total += UInt64(payload.count); progress(total)
                 }
-                let payload = data.dropFirst(12)
-                try writer.write(contentsOf: payload); hash.update(data: payload)
-                offset += UInt64(payload.count); total += UInt64(payload.count); progress(total)
             }
             guard hex(hash.finalize()) == entry.sha256 else { throw BackupError.invalid("entry checksum mismatch") }
             try writer.synchronize(); try writer.close()
@@ -196,7 +200,10 @@ public enum BackupFiles {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hash = SHA256()
-        while let bytes = try handle.read(upToCount: 1_048_576), !bytes.isEmpty { hash.update(data: bytes) }
+        while try autoreleasepool(invoking: { () throws -> Bool in
+            guard let bytes = try handle.read(upToCount: 1_048_576), !bytes.isEmpty else { return false }
+            hash.update(data: bytes); return true
+        }) { }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

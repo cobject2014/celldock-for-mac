@@ -3,6 +3,32 @@ import CryptoKit
 import CellDockBackupCore
 import Darwin
 
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--large-archive",
+   let chunks = Int(CommandLine.arguments[2]), (1...512).contains(chunks) {
+    let root = try BackupFiles.privateDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("Recordings"), withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("Recordings/large.caf")
+    FileManager.default.createFile(atPath: audio.path, contents: nil)
+    let writer = try FileHandle(forWritingTo: audio)
+    for _ in 0..<chunks { try autoreleasepool { try writer.write(contentsOf: Data(repeating: 37, count: 1_048_576)) } }
+    try writer.close()
+    let snapshot = BackupSnapshot(root: root, manifest: BackupManifest(appVersion: "test", files: [
+        BackupFileEntry(path: "Recordings/large.caf", size: UInt64(chunks) * 1_048_576, sha256: try BackupFiles.hash(audio))
+    ]))
+    let archive = root.appendingPathComponent("large.celldockbackup")
+    try BackupArchive.seal(snapshot, to: archive, password: "test-password-123", progress: { _ in }, cancelled: { false })
+    let opened = try BackupArchive.open(archive, into: root.appendingPathComponent("decoded"), password: "test-password-123", progress: { _ in }, cancelled: { false })
+    try expect(try BackupFiles.hash(opened.root.appendingPathComponent("Recordings/large.caf")) == snapshot.manifest.files[0].sha256, "large recording changed")
+    print("Streaming archive test passed: \(chunks) MiB")
+    var usage = rusage()
+    getrusage(RUSAGE_SELF, &usage)
+    try expect(usage.ru_maxrss < 160 * 1024 * 1024, "streaming archive retained whole-recording memory")
+    // Scope cleanup executes normally before returning from the test helper process.
+    try FileManager.default.removeItem(at: root)
+    Darwin.exit(0)
+}
+
 // Child process exits without unwinding at an injected durable transaction boundary.
 if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--crash-restore" {
     let base = URL(fileURLWithPath: CommandLine.arguments[2])
@@ -187,6 +213,49 @@ for (index, phase) in ["prepared", "file:calls.json", "settingsApplying", "crede
     try tx.recover(rollback: base.appendingPathComponent("rollback.celldockbackup"), password: "test-password-123")
 }
 print("Restore transaction and process-crash tests passed")
+// Exercise a successful A -> encrypted archive -> fresh B migration, including every secret namespace.
+let proxyID = UUID().uuidString
+let upstreamID = UUID().uuidString
+let fullSettings = try MemorySettings([
+    "SOCKSProxyConfigurations.v1": try JSONSerialization.data(withJSONObject: [["id": proxyID, "isEnabled": true]]),
+    "VoWiFiUpstreamProxies.v1": try JSONSerialization.data(withJSONObject: [["id": upstreamID, "isEnabled": true]]),
+    "AutomaticallyAnswerCalls.v1": true, "AutomaticAnswerDelay.v1": 3
+])
+let allCredentials = MemoryCredentials()
+allCredentials.values = ["sms:wecom.webhookURL": Data("fake-hook".utf8), "socks:" + proxyID: Data("fake-proxy".utf8), "vowifi:" + upstreamID: Data("fake-upstream".utf8)]
+let fullSnapshot = try BackupSnapshotBuilder.capture(root: source, into: testRoot.appendingPathComponent("full-snapshot"), settings: fullSettings, credentials: allCredentials, appVersion: "test")
+let fullArchive = testRoot.appendingPathComponent("full.celldockbackup")
+try BackupArchive.seal(fullSnapshot, to: fullArchive, password: "test-password-123", progress: { _ in }, cancelled: { false })
+let fullDecoded = try BackupArchive.open(fullArchive, into: testRoot.appendingPathComponent("full-decoded"), password: "test-password-123", progress: { _ in }, cancelled: { false })
+let fullTarget = testRoot.appendingPathComponent("full-target")
+try FileManager.default.createDirectory(at: fullTarget, withIntermediateDirectories: true)
+try Data("unmanaged".utf8).write(to: fullTarget.appendingPathComponent("notes.txt"))
+let fullTargetSettings = try MemorySettings()
+let fullTargetCredentials = MemoryCredentials()
+try BackupRestoreTransaction(root: fullTarget, journal: testRoot.appendingPathComponent("full-journal"), settings: fullTargetSettings, credentials: fullTargetCredentials)
+    .apply(fullDecoded, rollback: testRoot.appendingPathComponent("full-rollback"), password: "test-password-123")
+try expect(try fullTargetSettings.read() == fullSettings.read(), "portable settings changed")
+try expect(fullTargetCredentials.values == allCredentials.values, "credentials changed during migration")
+for entry in fullDecoded.manifest.files where !["preferences.plist", "credentials.json"].contains(entry.path) {
+    try expect(try BackupFiles.hash(fullTarget.appendingPathComponent(entry.path)) == entry.sha256, "restored file hash changed")
+}
+try expect(try String(contentsOf: fullTarget.appendingPathComponent("notes.txt"), encoding: .utf8) == "unmanaged", "unmanaged file overwritten")
+// Every write boundary is injected, not only the last write in a phase.
+let boundaries = captured.manifest.files.filter { !["preferences.plist", "credentials.json"].contains($0.path) }.map { "file:" + $0.path }
+    + BackupPreferences.smsAccounts.map { "credential:sms:" + $0 } + ["settingsApplying"]
+for (index, boundary) in boundaries.enumerated() {
+    let tx = BackupRestoreTransaction(root: target, journal: journal, settings: targetSettings, credentials: targetCredentials)
+    try expectThrows { try tx.apply(captured, rollback: testRoot.appendingPathComponent("boundary-\(index)"), password: "test-password-123", checkpoint: {
+        if $0 == boundary { throw CocoaError(.fileWriteNoPermission) }
+    }) }
+    try expect(try Data(contentsOf: target.appendingPathComponent("calls.json")) == oldCalls, "write boundary rollback lost old file")
+    try expect(targetCredentials.values.isEmpty, "write boundary rollback left secret")
+}
+var cancelAfterFirstChunk = false
+let midCancel = testRoot.appendingPathComponent("mid-cancel")
+try expectThrows { try BackupArchive.seal(fixture, to: midCancel, password: "test-password-123", progress: { amount in cancelAfterFirstChunk = amount > 1_000_000 }, cancelled: { cancelAfterFirstChunk }) }
+try expect(!FileManager.default.fileExists(atPath: midCancel.path), "cancel published partial archive")
+print("Cross-environment migration and all-write-boundary tests passed")
 let portableSource = testRoot.appendingPathComponent("portable-source")
 try FileManager.default.createDirectory(at: portableSource.appendingPathComponent("Sounds"), withIntermediateDirectories: true)
 try Data("tone".utf8).write(to: portableSource.appendingPathComponent("Sounds/custom.aiff"))

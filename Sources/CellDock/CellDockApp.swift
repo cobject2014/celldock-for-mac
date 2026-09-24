@@ -8,6 +8,9 @@ struct CellDockApp: App {
     private let appState: AppState?
 
     init() {
+        #if DEBUG
+        BackupModelSelfTest.runIfRequested()
+        #endif
         ModuleMaintenanceCLI.runIfRequested()
         if BackupRestoreCoordinator.maintenanceRequired {
             appState = nil

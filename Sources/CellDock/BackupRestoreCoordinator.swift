@@ -15,13 +15,25 @@ final class BackupRestoreCoordinator: ObservableObject {
     static let maintenanceKey = "CellDock.BackupMaintenance.v1"
     static let reviewKey = "CellDock.RestoreReviewRequired.v1"
     nonisolated static var root: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CellDock")
+        #if DEBUG
+        // LaunchServices can relaunch a test bundle without its shell environment.
+        // The dedicated bundle must therefore remain isolated by identity as well.
+        if Bundle.main.bundleIdentifier == "app.celldock.backup-ui-test" {
+            return Bundle.main.bundleURL.deletingLastPathComponent()
+        }
+        if let testPath = ProcessInfo.processInfo.environment["CELLDOCK_BACKUP_UI_TEST_DIRECTORY"],
+           testPath.hasPrefix("/private/tmp/CellDock-UI-") { return URL(fileURLWithPath: testPath) }
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CellDock")
     }
     nonisolated static var control: URL { root.appendingPathComponent("BackupRecovery") }
     nonisolated static var journal: URL { control.appendingPathComponent("journal.json") }
     nonisolated static var rollback: URL { control.appendingPathComponent("rollback.celldockbackup") }
     static var maintenanceRequired: Bool {
-        UserDefaults.standard.bool(forKey: maintenanceKey) || UserDefaults.standard.bool(forKey: reviewKey) ||
+        #if DEBUG
+        if root.path.hasPrefix("/private/tmp/CellDock-UI-") { return true }
+        #endif
+        return UserDefaults.standard.bool(forKey: maintenanceKey) || UserDefaults.standard.bool(forKey: reviewKey) ||
         BackupRestoreTransaction.hasPendingRecovery(at: journal)
     }
     @Published private(set) var busy = false
@@ -36,12 +48,14 @@ final class BackupRestoreCoordinator: ObservableObject {
     private var previewDirectory: URL?
     private var cancellation = BackupCancellation()
     private var window: NSWindow?
+    var presentationWindow: NSWindow? { window }
 
     func showWindow() {
         if window == nil {
             let value = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 650),
                 styleMask: [.titled, .resizable, .miniaturizable], backing: .buffered, defer: false)
             value.title = L10n.tr("备份与恢复")
+            value.contentMinSize = NSSize(width: 560, height: 480)
             value.contentView = NSHostingView(rootView: BackupSettingsView().cellDockLanguageEnvironment())
             value.isReleasedWhenClosed = false
             value.center(); window = value
@@ -73,6 +87,9 @@ final class BackupRestoreCoordinator: ObservableObject {
         needsRecovery = BackupRestoreTransaction.hasPendingRecovery(at: Self.journal)
     }
     func backup(to directory: URL, password: String) async {
+        #if DEBUG
+        if Self.root.path.hasPrefix("/private/tmp/CellDock-UI-") { return }
+        #endif
         guard !needsRecovery, !needsReview else { return }
         do {
             let token = try begin(); defer { busy = false }
@@ -93,6 +110,9 @@ final class BackupRestoreCoordinator: ObservableObject {
         } catch { fail(error) }
     }
     func inspect(archive: URL, password: String) async {
+        #if DEBUG
+        if Self.root.path.hasPrefix("/private/tmp/CellDock-UI-") { return }
+        #endif
         guard !needsRecovery, !needsReview else { return }
         do {
             let token = try begin(); defer { busy = false }
@@ -164,6 +184,9 @@ final class BackupRestoreCoordinator: ObservableObject {
         } catch { fail(error) }
     }
     func finish() {
+        #if DEBUG
+        if Self.root.path.hasPrefix("/private/tmp/CellDock-UI-") { NSApp.terminate(nil); return }
+        #endif
         guard !busy, !needsRecovery else { return }
         do {
             if needsReview {

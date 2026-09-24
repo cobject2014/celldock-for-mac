@@ -7,6 +7,7 @@ struct BackupSettingsView: View {
     @State private var confirmation = ""
     @State private var confirmsRestore = false
     @State private var acceptsMigration = false
+    @State private var choosingLocation = false
 
     var body: some View {
         ScrollView {
@@ -63,12 +64,20 @@ struct BackupSettingsView: View {
                     .disabled(coordinator.busy || coordinator.needsRecovery || (coordinator.needsReview && !acceptsMigration))
             }
             .padding(28)
-            .disabled(coordinator.busy) // The cancel control below remains available during read/encrypt work.
+            .disabled(coordinator.busy || choosingLocation) // Cancellation remains available below.
         }
         .overlay(alignment: .bottomTrailing) {
             if coordinator.busy && !coordinator.committing {
                 Button(L10n.tr("取消操作")) { coordinator.cancel() }.padding()
             }
+        }
+        .onAppear {
+            #if DEBUG
+            if BackupRestoreCoordinator.root.path.hasPrefix("/private/tmp/CellDock-UI-") {
+                password = "test-only-password-123"
+                confirmation = password
+            }
+            #endif
         }
         .alert(L10n.tr("替换本机数据？"), isPresented: $confirmsRestore) {
             Button(L10n.tr("取消"), role: .cancel) { }
@@ -82,16 +91,30 @@ struct BackupSettingsView: View {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let value = password; password = ""; confirmation = ""
-        Task { await coordinator.backup(to: url, password: value) }
+        show(panel) { url in
+            let value = password; password = ""; confirmation = ""
+            Task { await coordinator.backup(to: url, password: value) }
+        }
     }
     private func chooseArchive() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let value = password; password = ""; confirmation = ""
-        Task { await coordinator.inspect(archive: url, password: value) }
+        show(panel) { url in
+            let value = password; password = ""; confirmation = ""
+            Task { await coordinator.inspect(archive: url, password: value) }
+        }
+    }
+    private func show(_ panel: NSOpenPanel, selected: @escaping (URL) -> Void) {
+        guard !choosingLocation, let window = coordinator.presentationWindow else { return }
+        #if DEBUG
+        if BackupRestoreCoordinator.root.path.hasPrefix("/private/tmp/CellDock-UI-") { panel.directoryURL = BackupRestoreCoordinator.root }
+        #endif
+        choosingLocation = true
+        panel.beginSheetModal(for: window) { response in
+            choosingLocation = false
+            guard response == .OK, let url = panel.url else { return }
+            selected(url)
+        }
     }
 }
 
