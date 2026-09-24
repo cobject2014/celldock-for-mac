@@ -197,6 +197,17 @@ final class BackupRestoreCoordinator: ObservableObject {
         guard !busy, !needsRecovery, !Self.recoveryRequired else { return }
         do {
             if needsReview {
+                for (path, nested) in [("CallTranscriptions/settings.json", false), ("CallWelcome/welcome.json", true)] {
+                    let url = Self.root.appendingPathComponent(path)
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        _ = try BackupFiles.checkedFile(root: Self.root, path: path)
+                        let data = try BackupMaintenancePolicy.inactiveConfiguration(BackupSnapshotBuilder.metadata(url), nested: nested)
+                        try data.write(to: url, options: .atomic)
+                        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                        let handle = try FileHandle(forWritingTo: url)
+                        try handle.synchronize(); try handle.close()
+                    }
+                }
                 let settings = BackupSettingsAdapter()
                 try settings.replace(with: BackupMaintenancePolicy.inactivePreferences(settings.read()))
                 for key in ["CallRecordingConsentAcknowledged.v1", "CellDockInitialSetupCompleted.v1", "CellDock.modemNetworkServiceRecord", "SelectedInternetModule.v1", "CellularNetworkingModeByModule.v2", "CellularNetworkingPreferencesByModule.v1"] {

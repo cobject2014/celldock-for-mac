@@ -79,7 +79,7 @@ public enum BackupSnapshotBuilder {
         try validate(result)
         return result
     }
-    public static let dataFiles = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json"]
+    public static let dataFiles = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json"] + BackupPolicy.automaticAnswerFiles.sorted()
     public static func capture(root: URL, into staging: URL, settings: BackupSettingsAccess,
                                credentials: BackupCredentialAccess, appVersion: String,
                                additionalAccounts: [(String, String)] = []) throws -> BackupSnapshot {
@@ -100,6 +100,7 @@ public enum BackupSnapshotBuilder {
         for path in dataFiles where FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path) {
             let url = try BackupFiles.checkedFile(root: root, path: path)
             let before = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            try FileManager.default.createDirectory(at: staging.appendingPathComponent(path).deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try FileManager.default.copyItem(at: url, to: staging.appendingPathComponent(path)); paths.append(path)
             let after = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
             guard before.fileSize == after.fileSize, before.contentModificationDate == after.contentModificationDate else { throw BackupError.busy }

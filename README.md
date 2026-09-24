@@ -99,6 +99,37 @@ software required.
 - Manual and user-confirmed automatic recording captures both parties and saves as M4A.
 - The recording library offers waveforms, playback, seeking, speed control, volume, rename,
   export, and Reveal in Finder.
+- Optionally transcribe saved recordings through ASR and send the text to a WeCom group bot,
+  for auto-answered calls only or all recorded calls.
+
+Under Settings → Automatic answering, set the answer delay and use Recording transcription and delivery to enter
+the ASR base URL (default `http://DELLXPS.local:9100`), API key, language, and WeCom webhook,
+then enable automatic processing. It is off by default and independent of SMS forwarding;
+you can copy the existing SMS WeCom URL. These new credentials are stored directly in
+`~/Library/Application Support/CellDock/CallTranscriptions/settings.json`, without Keychain,
+with owner-only file permissions. USB audio input also requires system microphone permission;
+listen-only automatic answering does not capture the Mac microphone.
+
+The Call greeting section on the same page accepts greeting text, a separate TTS API key,
+voice, speaking rate, and service URL (default `http://DELLXPS.local:9101`). Generate and save
+uses `POST /v1/audio/speech` and converts the result to telephone 8 kHz PCM; Preview plays the
+saved greeting locally. Text is limited to 5000 characters and audio to five minutes.
+When enabled, the greeting plays once to the caller after an automatic answer and media
+readiness, and stops on hangup. Failed generation preserves the previous configuration.
+Changes apply to the next automatic answer; cached audio avoids waiting for TTS during calls.
+The Mac microphone stays inactive. Configuration, credentials, and audio are stored together
+in `~/Library/Application Support/CellDock/CallWelcome/welcome.json` with owner-only permissions,
+without Keychain. The greeting occupies the recording's uplink channel; ASR for automatically
+answered calls processes only the caller's channel and therefore excludes the greeting.
+
+Audio is converted to mono WAV segments of up to five minutes without changing the original.
+ASR uses `POST /v1/audio/transcriptions`, `X-API-Key`, and `qwen3-asr-0.6b`, with bounded retries
+when busy. Text is split to fit WeCom's 2048-byte limit. Recording details show saved transcripts,
+status, and retry controls; delivery retries reuse the saved text. Changing the webhook sends
+the complete saved text to the new destination when retried. Disabling pauses unfinished
+tasks; enabling again or restarting resumes them. Disabling or deleting a local recording cannot
+recall sent messages. If a server accepts a message but its acknowledgement is lost, retrying
+may duplicate that message. Keep the Mac running with access to ASR and WeCom.
 
 > Before recording a call, get consent from all participants and follow local laws.
 

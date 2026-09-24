@@ -1,6 +1,7 @@
 import Foundation
 
 public enum BackupPolicy {
+    public static let automaticAnswerFiles: Set<String> = ["CallWelcome/welcome.json", "CallTranscriptions/settings.json", "CallTranscriptions/transcriptions.json"]
     public static let maxManifest = 16 * 1024 * 1024
     public static let maxBytes: UInt64 = 1 << 40
     public static let rootFiles: Set<String> = ["messages.json", "messages.backup.json", "calls.json", "recordings.json", "deleted-message-ids.json", "preferences.plist", "credentials.json"]
@@ -9,7 +10,7 @@ public enum BackupPolicy {
         guard !path.isEmpty, path.utf8.count <= 1024, !path.contains("\\"),
               !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
               parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
-              rootFiles.contains(path) || (parts.count == 2 && ["Recordings", "Sounds"].contains(String(parts[0]))) else {
+              rootFiles.contains(path) || automaticAnswerFiles.contains(path) || (parts.count == 2 && ["Recordings", "Sounds"].contains(String(parts[0]))) else {
             throw BackupError.invalid("invalid entry path")
         }
     }
@@ -20,7 +21,7 @@ public enum BackupPolicy {
         var total: UInt64 = 0
         for file in manifest.files {
             try validateRelativePath(file.path)
-            if !file.path.contains("/"), file.size > 64 * 1024 * 1024 { throw BackupError.invalid("metadata too large") }
+            if !file.path.contains("/") || automaticAnswerFiles.contains(file.path), file.size > 64 * 1024 * 1024 { throw BackupError.invalid("metadata too large") }
             let folded = file.path.precomposedStringWithCanonicalMapping.lowercased()
             guard paths.insert(folded).inserted, file.sha256.count == 64,
                   file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),

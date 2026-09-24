@@ -1,3 +1,4 @@
 "CFBundleDisplayName" = "CellDock";
 "NSMicrophoneUsageDescription" = "CellDock utilise le microphone pour les appels vocaux via votre module cellulaire.";
 "NSContactsUsageDescription" = "CellDock utilise vos contacts pour identifier les appelants, passer des appels, envoyer des messages et gérer les contacts de votre Mac.";
+"NSLocalNetworkUsageDescription" = "CellDock se connecte au service ASR local configuré pour transcrire les enregistrements d’appels.";

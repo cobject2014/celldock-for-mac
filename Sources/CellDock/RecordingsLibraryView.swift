@@ -355,6 +355,9 @@ private struct RecordingDetailPane: View {
 
                     actionBar
 
+                    RecordingTranscriptCard(recordID: record.id,
+                        privacyEnabled: appState.isPresentationPrivacyEnabled)
+
                     if let error = recordings.lastError {
                         Label(L10n.tr(error), systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)

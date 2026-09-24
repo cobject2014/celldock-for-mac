@@ -157,6 +157,11 @@ final class MemoryCredentials: BackupCredentialAccess {
 let settings = try MemorySettings(["AutomaticallyAnswerCalls.v1": true, "AutomaticAnswerDelay.v1": 3])
 let credentials = MemoryCredentials()
 credentials.values["sms:wecom.webhookURL"] = Data("test-secret".utf8)
+for (path, contents) in [("CallWelcome/welcome.json", "{\"configuration\":{\"enabled\":true},\"pcm\":null}"), ("CallTranscriptions/settings.json", "{\"enabled\":true}"), ("CallTranscriptions/transcriptions.json", "[]")] {
+    let url = source.appendingPathComponent(path)
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(contents.utf8).write(to: url)
+}
 let captured = try BackupSnapshotBuilder.capture(root: source, into: testRoot.appendingPathComponent("snapshot"),
     settings: settings, credentials: credentials, appVersion: "test")
 try BackupSnapshotBuilder.validate(captured)
@@ -164,11 +169,20 @@ try expect(captured.manifest.callCount == 1, "call count mismatch")
 let capturedSecrets = try JSONDecoder().decode([BackupCredential].self, from: Data(contentsOf: captured.root.appendingPathComponent("credentials.json")))
 try expect(capturedSecrets.first(where: { $0.account == "wecom.webhookURL" })?.value == Data("test-secret".utf8), "credential missing")
 credentials.deny = true
+try expect(captured.manifest.files.contains { $0.path == "CallWelcome/welcome.json" }, "backup lost greeting configuration/audio")
+try expect(captured.manifest.files.contains { $0.path == "CallTranscriptions/settings.json" }, "backup lost ASR configuration")
+try expect(captured.manifest.files.contains { $0.path == "CallTranscriptions/transcriptions.json" }, "backup lost transcripts")
 try expectThrows { _ = try BackupSnapshotBuilder.capture(root: source, into: testRoot.appendingPathComponent("denied"), settings: settings, credentials: credentials, appVersion: "test") }
 credentials.deny = false
 let forbidden = try MemorySettings(["CellDock.modemNetworkServiceRecord": "source-machine"])
 try expectThrows { _ = try BackupPreferences.decode(forbidden.read()) }
 print("Snapshot and credential tests passed")
+let disabledASR = try BackupMaintenancePolicy.inactiveConfiguration(Data("{\"enabled\":true,\"apiKey\":\"keep\"}".utf8), nested: false)
+let disabledASRValues = try JSONSerialization.jsonObject(with: disabledASR) as! [String: Any]
+try expect(disabledASRValues["enabled"] as? Bool == false && disabledASRValues["apiKey"] as? String == "keep", "restored ASR must be inactive without losing credentials")
+let disabledWelcome = try BackupMaintenancePolicy.inactiveConfiguration(Data("{\"configuration\":{\"enabled\":true},\"pcm\":\"AAAA\"}".utf8), nested: true)
+let disabledWelcomeValues = try JSONSerialization.jsonObject(with: disabledWelcome) as! [String: Any]
+try expect((disabledWelcomeValues["configuration"] as? [String: Any])?["enabled"] as? Bool == false && disabledWelcomeValues["pcm"] as? String == "AAAA", "restored greeting must be inactive without losing audio")
 // Fault injection must restore both old files and absence of newly introduced credentials.
 let target = testRoot.appendingPathComponent("target")
 try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)

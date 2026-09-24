@@ -92,7 +92,7 @@ final class AppState: ObservableObject {
     private var started = false
     var canEnterBackupMaintenance: Bool {
         BackupMaintenancePolicy.canEnter(activeOperations: [
-            call.hasCall, moduleCallSnapshots.values.contains(where: \.hasCall),
+            call.hasCall, moduleCallSnapshots.values.contains(where: \.hasCall), CallWelcomeStore.shared.isGenerating,
             callRecordings.phase != .idle, euicc.isBusy, auxiliaryEUICCSnapshots.values.contains(where: \.isBusy),
             isSendingMessage, !sendingMessageModuleIDs.isEmpty, !deletingMessageIDs.isEmpty,
             isChangingCall, isExecutingAT, isChangingNetwork, isConfiguringECM, isConvertingModuleIdentity,
@@ -491,6 +491,13 @@ final class AppState: ObservableObject {
         }
         guard !started else { return }
         started = true
+        callRecordings.onRecordingSaved = { record in
+            CallTranscriptionStore.shared.enqueue(record)
+        }
+        callRecordings.onRecordingDeleted = { id in
+            CallTranscriptionStore.shared.remove(id)
+        }
+        CallTranscriptionStore.shared.start()
         SOCKSSignalSafety.install()
         socksProxyController.start()
         voWiFiController.start()
@@ -2286,7 +2293,8 @@ final class AppState: ObservableObject {
         }
         guard !isChangingCall else { return }
         isChangingCall = true
-        service.answerCall(listenOnly: listenOnly) { [weak self] result in
+        let welcomePCM = listenOnly ? CallWelcomeStore.shared.audioForCall : nil
+        service.answerCall(listenOnly: listenOnly, welcomePCM: welcomePCM) { [weak self] result in
             guard let self else { return }
             self.isChangingCall = false
             self.show(result)

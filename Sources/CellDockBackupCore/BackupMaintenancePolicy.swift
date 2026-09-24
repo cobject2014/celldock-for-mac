@@ -1,6 +1,15 @@
 import Foundation
 
 public enum BackupMaintenancePolicy {
+    public static func inactiveConfiguration(_ data: Data, nested: Bool) throws -> Data {
+        guard var value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw BackupError.invalid("invalid automation configuration") }
+        if nested {
+            guard var configuration = value["configuration"] as? [String: Any] else { throw BackupError.invalid("invalid greeting configuration") }
+            configuration["enabled"] = false
+            value["configuration"] = configuration
+        } else { value["enabled"] = false }
+        return try JSONSerialization.data(withJSONObject: value)
+    }
     public static func canEnter(activeOperations: [Bool]) -> Bool { !activeOperations.contains(true) }
     /// Preserve portable settings, but require target-Mac consent before any automation runs.
     public static func inactivePreferences(_ data: Data) throws -> Data {

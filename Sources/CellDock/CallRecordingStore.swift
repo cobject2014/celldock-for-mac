@@ -70,6 +70,9 @@ final class CallRecordingStore: ObservableObject {
     @Published private(set) var playbackVolume: Float = 1
     @Published private(set) var lastError: String?
 
+    var onRecordingSaved: ((CallRecordingRecord) -> Void)?
+    var onRecordingDeleted: ((UUID) -> Void)?
+
     private let directoryURL: URL
     private let metadataURL: URL
     private var activeContext: (
@@ -159,6 +162,7 @@ final class CallRecordingStore: ObservableObject {
                     )
                     self.records.insert(record, at: 0)
                     self.save()
+                    self.onRecordingSaved?(record)
                     completion?(record)
                 case let .failure(error):
                     self.lastError = error.localizedDescription
@@ -275,6 +279,7 @@ final class CallRecordingStore: ObservableObject {
     }
 
     func delete(_ record: CallRecordingRecord) {
+        onRecordingDeleted?(record.id)
         if playingRecordingID == record.id { stopPlayback() }
         try? FileManager.default.removeItem(at: fileURL(for: record))
         records.removeAll { $0.id == record.id }

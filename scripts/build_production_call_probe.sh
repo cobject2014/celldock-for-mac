@@ -12,6 +12,7 @@ PROBE_APP="$TOOLS_DIR/CellDock Production Call Probe.app"
 mkdir -p "$TOOLS_DIR"
 xcrun clang \
   -std=c11 \
+  -target arm64-apple-macosx14.0 \
   -O2 \
   -Wall -Wextra -Werror \
   -mmacosx-version-min=14.0 \
@@ -20,6 +21,7 @@ xcrun clang \
   -o "$TOOLS_DIR/ModemBridge.production-probe.o"
 xcrun clang \
   -std=c11 \
+  -target arm64-apple-macosx14.0 \
   -O2 \
   -Wall -Wextra -Werror \
   -mmacosx-version-min=14.0 \
@@ -35,6 +37,11 @@ swiftc \
   -Xcc "-fmodule-map-file=$ROOT/tools/CModemBridge.modulemap" \
   -Xcc "-fmodule-map-file=$ROOT/tools/CUACProbe.modulemap" \
   "$ROOT/Sources/CellDock/AppLanguage.swift" \
+  "$ROOT/Sources/CellDock/AppIdentityMigration.swift" \
+  "$ROOT/Sources/CellDock/CellularModuleID.swift" \
+  "$ROOT/Sources/CellDock/ModemInventoryService.swift" \
+  "$ROOT/Sources/CellDock/EUICCModels.swift" \
+  "$ROOT/Sources/CellDock/SMSArchiveCleanup.swift" \
   "$ROOT/Sources/CellDock/ADBProtocol.swift" \
   "$ROOT/Sources/CellDock/ADBModuleController.swift" \
   "$ROOT/Sources/CellDock/ATConsoleModels.swift" \
@@ -44,13 +51,18 @@ swiftc \
   "$ROOT/Sources/CellDock/CallModels.swift" \
   "$ROOT/Sources/CellDock/CallRecordingStore.swift" \
   "$ROOT/Sources/CellDock/Models.swift" \
+  "$ROOT/Sources/CellDockNetworkIPC/CellDockNetworkIPC.swift" \
   "$ROOT/Sources/CellDock/QADBKeyDeriver.swift" \
   "$ROOT/Sources/CellDock/SMSPDUDecoder.swift" \
   "$ROOT/Sources/CellDock/SMSPDUEncoder.swift" \
   "$ROOT/Sources/CellDock/SMSVerificationCode.swift" \
   "$ROOT/Sources/CellDock/ModuleVoicePayload.swift" \
   "$ROOT/Sources/CellDock/ModuleVoiceRuntime.swift" \
+  "$ROOT/Sources/CellDock/VoWiFiRuntimeModels.swift" \
+  "$ROOT/Sources/CellDock/VoWiFiRuntimeControl.swift" \
+  "$ROOT/Sources/CellDock/VoWiFiSIMBridge.swift" \
   "$ROOT/Sources/CellDock/VoiceAudioService.swift" \
+  "$ROOT/Sources/CellDock/CallWelcomePlayback.swift" \
   "$ROOT/Sources/CellDock/VoiceSignalProcessor.swift" \
   "$ROOT/Sources/CellDock/ModemService.swift" \
   "$ROOT/Sources/CellDock/USBInterfaceContentionResolver.swift" \

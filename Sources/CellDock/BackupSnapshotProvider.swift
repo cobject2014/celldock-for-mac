@@ -16,6 +16,15 @@ enum BackupSnapshotProvider {
         let calls = try decode([CallHistoryRecord].self, "calls.json") ?? []
         let recordings = try decode([CallRecordingRecord].self, "recordings.json") ?? []
         _ = try decode([SMSMessage.ID: Date].self, "deleted-message-ids.json")
+        // These stores use JSONEncoder's default date format rather than ISO-8601.
+        decoder.dateDecodingStrategy = .deferredToDate
+        _ = try decode(CallTranscriptionConfiguration.self, "CallTranscriptions/settings.json")
+        _ = try decode([CallTranscriptionJob].self, "CallTranscriptions/transcriptions.json")
+        struct WelcomeBackup: Decodable { let configuration: CallWelcomeConfiguration; let pcm: Data? }
+        if let welcome = try decode(WelcomeBackup.self, "CallWelcome/welcome.json") {
+            guard welcome.configuration.speed.isFinite, (0.5...2).contains(welcome.configuration.speed),
+                  welcome.pcm.map({ $0.count % 2 == 0 && $0.count <= 8000 * 2 * 300 }) ?? true else { throw BackupError.invalid("invalid greeting audio") }
+        }
         guard Set(messages.map(\.id)).count == messages.count,
               Set(calls.map(\.id)).count == calls.count,
               Set(recordings.map(\.id)).count == recordings.count else { throw BackupError.invalid("duplicate records") }

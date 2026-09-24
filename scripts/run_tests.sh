@@ -122,6 +122,9 @@ swiftc \
 
 "$ROOT/.build/self-tests/SMSForwardingSelfTests"
 
+zsh "$ROOT/scripts/test_call_transcription.sh"
+zsh "$ROOT/scripts/test_call_welcome.sh"
+
 xcrun clang \
   -std=c11 \
   -O2 \

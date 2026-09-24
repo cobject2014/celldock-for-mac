@@ -105,3 +105,9 @@ manual import normalizes it to the accounts referenced by the archived settings.
 The encrypted original is not modified. Call history whose recording was already
 deleted remains valid and can be backed up; indexed recordings must still have
 their audio files.
+
+The integrated build also backs up ASR settings, transcription history/delivery
+progress, and TTS greeting settings with their cached audio. Credentials within
+those configuration files are protected by the same encrypted archive. After
+successful migration, ASR and greeting playback are disabled until explicitly
+enabled on the destination Mac; rollback does not alter their original switches.

@@ -28,17 +28,24 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.3.1</string>
 	<key>CFBundleVersion</key>
-	<string>105</string>
+	<string>115</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSContactsUsageDescription</key>
 	<string>用于查找、拨打、发送短信以及管理 Mac 系统通讯录中的联系人。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 CellDock contributors</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于连接你配置的局域网 ASR 服务，将通话录音转录为文本。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于通过蜂窝模块在 Mac 上进行语音通话。</string>
 	<key>SUEnableInstallerLauncherService</key>

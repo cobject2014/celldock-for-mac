@@ -1011,12 +1011,16 @@ static void write_output_pcm(
     if (probe == NULL || output_data == NULL) {
         return;
     }
-    if (atomic_exchange_explicit(
+    if (atomic_load_explicit(
             &probe->uplink_flush_requested,
-            0,
-            memory_order_acq_rel
+            memory_order_acquire
         ) != 0) {
         pcm_ring_discard_from_consumer(&probe->uplink_ring);
+        /* Acknowledge AFTER discard. The producer rejects new frames while
+         * this flag is set, so an accepted greeting prefix cannot be flushed.
+         * Repeated flush requests during this interval are equivalent: no
+         * intervening frames can have been accepted by the sole producer. */
+        atomic_store_explicit(&probe->uplink_flush_requested, 0, memory_order_release);
     }
 
     for (UInt32 buffer_index = 0;
@@ -2145,6 +2149,9 @@ size_t celldock_uac_probe_write_uplink_pcm16(
     size_t frame_count
 ) {
     if (probe == NULL) {
+        return 0;
+    }
+    if (atomic_load_explicit(&probe->uplink_flush_requested, memory_order_acquire) != 0) {
         return 0;
     }
     return pcm_ring_write(&probe->uplink_ring, frames, frame_count);

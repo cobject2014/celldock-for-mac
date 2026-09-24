@@ -7,6 +7,7 @@ struct CellDockSettingsView: View {
         case general = "通用"
         case sounds = "声音"
         case communications = "蜂窝与通信"
+        case automaticAnswer = "自动应答"
         case permissions = "通知与权限"
         case updates = "软件更新"
         case backup = "备份与恢复"
@@ -18,6 +19,7 @@ struct CellDockSettingsView: View {
             case .general: return "gearshape"
             case .sounds: return "speaker.wave.2.fill"
             case .communications: return "antenna.radiowaves.left.and.right"
+            case .automaticAnswer: return "phone.badge.waveform"
             case .permissions: return "bell.badge"
             case .updates: return "arrow.triangle.2.circlepath"
             case .backup: return "externaldrive.badge.timemachine"
@@ -29,6 +31,7 @@ struct CellDockSettingsView: View {
             case .general: return L10n.tr("启动、外观与菜单栏行为")
             case .sounds: return L10n.tr("选择短信与来电使用的提示音")
             case .communications: return L10n.tr("查看模块状态并管理通话与短信处理")
+            case .automaticAnswer: return L10n.tr("管理来电自动接听、录音转录与推送")
             case .permissions: return L10n.tr("检查 CellDock 的系统访问权限")
             case .updates: return L10n.tr("检查版本并选择更新频道")
             case .backup: return L10n.tr("加密备份与跨 Mac 恢复")
@@ -40,6 +43,7 @@ struct CellDockSettingsView: View {
             case .general: return L10n.tr("外观、语言与启动")
             case .sounds: return L10n.tr("短信提示音与来电铃声")
             case .communications: return L10n.tr("通话、短信与转发")
+            case .automaticAnswer: return L10n.tr("接听、转录与推送")
             case .permissions: return L10n.tr("通知与系统访问权限")
             case .updates: return L10n.tr("版本与更新频道")
             case .backup: return L10n.tr("加密备份与跨 Mac 恢复")
@@ -62,7 +66,6 @@ struct CellDockSettingsView: View {
     @State private var didResolveInitialCategory = false
     @State private var isConfirmingVerificationAutoDelete = false
     @State private var isConfirmingAutomaticRecording = false
-    @State private var isConfirmingAutomaticAnswer = false
     @State private var microphoneAuthorizationStatus =
         AVCaptureDevice.authorizationStatus(for: .audio)
     @State private var presentedForwardingChannel: SMSForwardChannel?
@@ -119,15 +122,6 @@ struct CellDockSettingsView: View {
         } message: {
             Text("通话接通后会自动录制双方的声音。请先确认已取得通话参与者同意，并遵守所在地法律法规。录音仅保存在这台 Mac。")
         }
-        .alert(L10n.tr("开启自动接听并录音？"), isPresented: $isConfirmingAutomaticAnswer) {
-            Button(L10n.tr("取消"), role: .cancel) { }
-            Button(L10n.tr("同意并开启")) {
-                recordingConsent = true
-                appState.setAutomaticallyAnswerCalls(true)
-            }
-        } message: {
-            Text(L10n.tr("来电将自动接通并录音，不采集本机麦克风，对方声音通过当前输出设备播放。录音仅保存在这台 Mac，请确保通话参与者知情同意。"))
-        }
         .sheet(item: $presentedForwardingChannel) { channel in
             smsForwardingConfigSheet(for: channel)
         }
@@ -157,7 +151,7 @@ struct CellDockSettingsView: View {
 
                     settingsSidebarGroup(
                         L10n.tr("偏好设置"),
-                        categories: [.general, .sounds, .communications]
+                        categories: [.general, .sounds, .communications, .automaticAnswer]
                     )
                     settingsSidebarGroup(
                         L10n.tr("系统"),
@@ -314,6 +308,8 @@ struct CellDockSettingsView: View {
             SoundSettingsView()
         case .communications:
             communicationSettings
+        case .automaticAnswer:
+            AutomaticAnswerSettingsView()
         case .permissions:
             permissionSettings
         case .updates:
@@ -514,27 +510,6 @@ struct CellDockSettingsView: View {
     private var communicationSettings: some View {
         VStack(spacing: 16) {
             moduleStatusStrip
-
-            settingsSection(title: L10n.tr("自动接听")) {
-                VStack(spacing: 12) {
-                    settingRow(title: L10n.tr("自动接听并录音"),
-                        detail: L10n.tr("仅听对方，不采集本机麦克风；自动录音独立于下方开关。Mac 需保持唤醒且 CellDock 正在运行。")) {
-                        Toggle(L10n.tr("自动接听并录音"), isOn: Binding(
-                            get: { appState.automaticallyAnswerCalls },
-                            set: { enabled in
-                                if enabled { isConfirmingAutomaticAnswer = true }
-                                else { appState.setAutomaticallyAnswerCalls(false) }
-                            }
-                        )).labelsHidden().toggleStyle(.adaptiveGlass)
-                    }
-                    Stepper(value: Binding(
-                        get: { appState.automaticAnswerDelay },
-                        set: { appState.setAutomaticAnswerDelay($0) }
-                    ), in: 1...60) {
-                        Text(L10n.tr("检测到来电 %lld 秒后接听（下次来电生效）", Int64(appState.automaticAnswerDelay)))
-                    }
-                }.padding(16)
-            }
 
             settingsSection(title: L10n.tr("通话录音")) {
                 settingRow(

@@ -38,6 +38,18 @@ enum BackupModelSelfTest {
         try encoder.encode([call]).write(to: source.appendingPathComponent("calls.json"))
         try encoder.encode([record]).write(to: source.appendingPathComponent("recordings.json"))
         try encoder.encode(["deleted": date]).write(to: source.appendingPathComponent("deleted-message-ids.json"))
+        let asrDirectory = source.appendingPathComponent("CallTranscriptions")
+        let welcomeDirectory = source.appendingPathComponent("CallWelcome")
+        try FileManager.default.createDirectory(at: asrDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: welcomeDirectory, withIntermediateDirectories: true)
+        let storeEncoder = JSONEncoder()
+        var job = CallTranscriptionJob(record: record)
+        job.phase = .sent; job.transcript = "留言测试"
+        try storeEncoder.encode([job]).write(to: asrDirectory.appendingPathComponent("transcriptions.json"))
+        try storeEncoder.encode(CallTranscriptionConfiguration()).write(to: asrDirectory.appendingPathComponent("settings.json"))
+        struct WelcomeFixture: Encodable { let configuration: CallWelcomeConfiguration; let pcm: Data }
+        try storeEncoder.encode(WelcomeFixture(configuration: CallWelcomeConfiguration(), pcm: Data([0, 1])))
+            .write(to: welcomeDirectory.appendingPathComponent("welcome.json"))
         let audio = source.appendingPathComponent("Recordings/stereo.caf")
         let format = AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 2)!
         do {
@@ -69,6 +81,11 @@ enum BackupModelSelfTest {
             throw BackupError.invalid("business data or stereo audio changed")
         }
         // Ordinary recording deletion deliberately leaves history and its old recordingID.
+        for path in ["CallTranscriptions/transcriptions.json", "CallTranscriptions/settings.json", "CallWelcome/welcome.json"] {
+            guard try BackupFiles.hash(source.appendingPathComponent(path)) == BackupFiles.hash(target.appendingPathComponent(path)) else {
+                throw BackupError.invalid("automatic answering data changed during migration")
+            }
+        }
         try encoder.encode([CallRecordingRecord]()).write(to: source.appendingPathComponent("recordings.json"))
         try FileManager.default.removeItem(at: audio)
         let deletedRecording = try BackupSnapshotBuilder.capture(root: source, into: temp.appendingPathComponent("deleted-recording"), settings: Settings(), credentials: Credentials(), appVersion: "test")
