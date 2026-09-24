@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
+"$ROOT/scripts/run_backup_tests.sh"
 mkdir -p "$ROOT/.build/caches/clang" "$ROOT/.build/caches/swiftpm"
 export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$ROOT/.build/caches/clang}"
 export SWIFTPM_MODULECACHE_OVERRIDE="${SWIFTPM_MODULECACHE_OVERRIDE:-$ROOT/.build/caches/swiftpm}"

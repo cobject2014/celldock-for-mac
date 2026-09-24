@@ -17,6 +17,9 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.4")
     ],
     targets: [
+        .target(name: "CellDockBackupCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .executableTarget(name: "CellDockBackupSelfTests", dependencies: ["CellDockBackupCore"],
+                          path: "Tests/BackupSelfTests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CModemBridge",
             dependencies: [],
