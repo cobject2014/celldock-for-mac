@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
-    private let updaterManager = UpdaterManager.shared
+    private lazy var updaterManager = UpdaterManager.shared
     private var menuBarPanelController: MenuBarPanelController?
     private weak var appState: AppState?
     private var didFinishLaunching = false
@@ -21,6 +21,10 @@ final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if BackupRestoreCoordinator.maintenanceRequired && appState == nil {
+            BackupRestoreCoordinator.shared.showWindow()
+            return
+        }
         AppAppearanceMode.storedPreference.apply()
         updaterManager.start()
         didFinishLaunching = true
@@ -34,7 +38,8 @@ final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        AppTerminationCoordinator.shared.beginTermination(of: sender)
+        if appState == nil && BackupRestoreCoordinator.shared.busy { return .terminateCancel }
+        return AppTerminationCoordinator.shared.beginTermination(of: sender)
     }
 
     func applicationShouldHandleReopen(
@@ -42,7 +47,8 @@ final class AppTerminationDelegate: NSObject, NSApplicationDelegate {
         hasVisibleWindows flag: Bool
     ) -> Bool {
         if !flag {
-            CommunicationWindowController.shared.handleApplicationReopen()
+            if appState == nil { BackupRestoreCoordinator.shared.showWindow() }
+            else { CommunicationWindowController.shared.handleApplicationReopen() }
         }
         return true
     }

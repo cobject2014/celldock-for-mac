@@ -57,6 +57,18 @@ try expectThrows { try BackupPolicy.validateManifest(manifest([entry], version: 
 try expectThrows { try BackupPolicy.validateManifest(manifest([BackupFileEntry(path: "calls.json", size: UInt64.max, sha256: entry.sha256)])) }
 try expectThrows { try BackupPolicy.validateManifest(manifest([BackupFileEntry(path: "calls.json", size: 0, sha256: "bad")])) }
 print("Backup policy tests passed")
+try expect(BackupMaintenancePolicy.canEnter(activeOperations: []), "idle maintenance rejected")
+try expect(!BackupMaintenancePolicy.canEnter(activeOperations: [false, true, false]), "secondary busy operation ignored")
+let unsafePreferences = try PropertyListSerialization.data(fromPropertyList: [
+    "AutomaticallyAnswerCalls.v1": true, "AutomaticallyRecordCalls.v1": true,
+    "AutoDeleteReadVerificationMessages.v1": true,
+    "SMSForwardingSettings.v1": Data("{\"enabledChannels\":[\"wecom\"]}".utf8),
+    "SOCKSProxyConfigurations.v1": Data("[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"isEnabled\":true}]".utf8)
+], format: .binary, options: 0)
+let safePreferences = try BackupPreferences.decode(BackupMaintenancePolicy.inactivePreferences(unsafePreferences))
+try expect(safePreferences["AutomaticallyAnswerCalls.v1"] as? Bool == false, "auto answer re-enabled")
+try expect(safePreferences["AutomaticallyRecordCalls.v1"] as? Bool == false, "auto recording re-enabled")
+try expect(safePreferences["AutoDeleteReadVerificationMessages.v1"] as? Bool == false, "automatic deletion re-enabled")
 
 let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("CellDock-backup-tests-\(UUID().uuidString)")
 try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)

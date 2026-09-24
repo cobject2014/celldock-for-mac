@@ -4,6 +4,7 @@ import Combine
 import Foundation
 import CellDockNetworkIPC
 import OSLog
+import CellDockBackupCore
 
 private let cellularNetworkLogger = Logger(
     subsystem: "app.celldock.mac",
@@ -89,6 +90,15 @@ final class AppState: ObservableObject {
     private let messageStore = MessageStore()
     private let launchAtLoginController = LaunchAtLoginController()
     private var started = false
+    var canEnterBackupMaintenance: Bool {
+        BackupMaintenancePolicy.canEnter(activeOperations: [
+            call.hasCall, moduleCallSnapshots.values.contains(where: \.hasCall),
+            callRecordings.phase != .idle, euicc.isBusy, auxiliaryEUICCSnapshots.values.contains(where: \.isBusy),
+            isSendingMessage, !sendingMessageModuleIDs.isEmpty, !deletingMessageIDs.isEmpty,
+            isChangingCall, isExecutingAT, isChangingNetwork, isConfiguringECM, isConvertingModuleIdentity,
+            isChangingIncomingCallSetting, pendingNetworkModuleRestart != nil, cellularLinkRecoveryInFlight
+        ])
+    }
     private var notificationAuthorizationCompletions: [() -> Void] = []
     private var lastEUICCProbeIdentity: String?
     private var activeModemLocationID: UInt32?

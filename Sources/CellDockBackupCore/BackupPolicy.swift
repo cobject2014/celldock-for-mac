@@ -20,6 +20,7 @@ public enum BackupPolicy {
         var total: UInt64 = 0
         for file in manifest.files {
             try validateRelativePath(file.path)
+            if !file.path.contains("/"), file.size > 64 * 1024 * 1024 { throw BackupError.invalid("metadata too large") }
             let folded = file.path.precomposedStringWithCanonicalMapping.lowercased()
             guard paths.insert(folded).inserted, file.sha256.count == 64,
                   file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),

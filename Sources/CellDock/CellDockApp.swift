@@ -5,13 +5,18 @@ import SwiftUI
 @main
 struct CellDockApp: App {
     @NSApplicationDelegateAdaptor(AppTerminationDelegate.self) private var appDelegate
-    @StateObject private var appState: AppState
+    private let appState: AppState?
 
     init() {
         ModuleMaintenanceCLI.runIfRequested()
+        if BackupRestoreCoordinator.maintenanceRequired {
+            appState = nil
+            DispatchQueue.main.async { BackupRestoreCoordinator.shared.showWindow() }
+            return
+        }
         AppIdentityMigration.migratePreferencesIfNeeded()
         let state = AppState()
-        _appState = StateObject(wrappedValue: state)
+        appState = state
         state.start()
         appDelegate.configure(appState: state)
     }
@@ -21,7 +26,8 @@ struct CellDockApp: App {
             Color.clear
                 .frame(width: 1, height: 1)
                 .onAppear {
-                    appState.showPhoneWindow(section: .settings)
+                    if let appState { appState.showPhoneWindow(section: .settings) }
+                    else { BackupRestoreCoordinator.shared.showWindow() }
                     DispatchQueue.main.async {
                         SettingsSceneWindowRegistry.shared.orderOut()
                     }
@@ -30,7 +36,7 @@ struct CellDockApp: App {
                 .cellDockLanguageEnvironment()
         }
         .commands {
-            CellDockCommands(appState: appState)
+            if let appState { CellDockCommands(appState: appState) }
         }
     }
 }

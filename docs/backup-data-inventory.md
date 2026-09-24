@@ -5,7 +5,7 @@ Audit of persistent storage in Sources/CellDock; no live user secrets inspected.
 | Owner | Data | Migration |
 |---|---|---|
 | MessageStore | messages.json, deleted-message-ids.json | Include; missing collection is empty; preserve read/deletion state |
-| MessageStore | messages.backup.json | Exclude redundant recovery copy; rebuild from restored messages |
+| MessageStore | messages.backup.json | Include as managed fallback; never retain the target's stale recovery copy after restore |
 | CallHistoryStore | calls.json | Include historical module attribution and recording IDs |
 | CallRecordingStore | recordings.json, Recordings/* | Include unchanged bytes; missing indexed audio is an error |
 | AlertSoundService | Sounds/*, per-kind selected sound/name keys | Include locally imported resources (already relative names) |

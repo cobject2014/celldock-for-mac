@@ -9,6 +9,7 @@ struct CellDockSettingsView: View {
         case communications = "蜂窝与通信"
         case permissions = "通知与权限"
         case updates = "软件更新"
+        case backup = "备份与恢复"
 
         var title: String { L10n.tr(rawValue) }
 
@@ -19,6 +20,7 @@ struct CellDockSettingsView: View {
             case .communications: return "antenna.radiowaves.left.and.right"
             case .permissions: return "bell.badge"
             case .updates: return "arrow.triangle.2.circlepath"
+            case .backup: return "externaldrive.badge.timemachine"
             }
         }
 
@@ -29,6 +31,7 @@ struct CellDockSettingsView: View {
             case .communications: return L10n.tr("查看模块状态并管理通话与短信处理")
             case .permissions: return L10n.tr("检查 CellDock 的系统访问权限")
             case .updates: return L10n.tr("检查版本并选择更新频道")
+            case .backup: return L10n.tr("加密备份与跨 Mac 恢复")
             }
         }
 
@@ -39,6 +42,7 @@ struct CellDockSettingsView: View {
             case .communications: return L10n.tr("通话、短信与转发")
             case .permissions: return L10n.tr("通知与系统访问权限")
             case .updates: return L10n.tr("版本与更新频道")
+            case .backup: return L10n.tr("加密备份与跨 Mac 恢复")
             }
         }
     }
@@ -157,7 +161,7 @@ struct CellDockSettingsView: View {
                     )
                     settingsSidebarGroup(
                         L10n.tr("系统"),
-                        categories: [.permissions, .updates]
+                        categories: [.permissions, .backup, .updates]
                     )
                 }
                 .padding(.horizontal, 12)
@@ -314,6 +318,8 @@ struct CellDockSettingsView: View {
             permissionSettings
         case .updates:
             updateSettings
+        case .backup:
+            BackupMaintenanceEntryView()
         }
     }
 
