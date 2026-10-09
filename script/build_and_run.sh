@@ -10,6 +10,7 @@ APP_BUNDLE="$DIST_DIR/CellDock.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
+APP_FRAMEWORKS="$APP_CONTENTS/Frameworks"
 APP_BINARY="$APP_MACOS/CellDock"
 HELPER_DIR="$APP_CONTENTS/Library/PrivilegedHelperTools"
 DAEMON_DIR="$APP_CONTENTS/Library/LaunchDaemons"
@@ -37,6 +38,7 @@ mkdir -p \
   "$WORKSPACE_HOME" \
   "$WORKSPACE_CACHE/clang" \
   "$WORKSPACE_CACHE/swiftpm"
+REAL_HOME="$HOME"
 export HOME="$WORKSPACE_HOME"
 export XDG_CACHE_HOME="$WORKSPACE_CACHE"
 export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$WORKSPACE_CACHE/clang}"
@@ -47,6 +49,9 @@ pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 cd "$ROOT_DIR"
 xcrun swift build --disable-sandbox -Xswiftc -disable-sandbox
 BIN_DIR="$(xcrun swift build --disable-sandbox -Xswiftc -disable-sandbox --show-bin-path)"
+# Restore the real $HOME so codesign below can find the login keychain;
+# the sandboxed $HOME above is only for isolating the SwiftPM build cache.
+export HOME="$REAL_HOME"
 
 [[ "$APP_BUNDLE" == "$ROOT_DIR/dist/CellDock.app" ]] || {
   print -u2 "Unexpected app bundle path: $APP_BUNDLE"
@@ -56,6 +61,7 @@ BIN_DIR="$(xcrun swift build --disable-sandbox -Xswiftc -disable-sandbox --show-
 mkdir -p \
   "$APP_MACOS" \
   "$APP_RESOURCES" \
+  "$APP_FRAMEWORKS" \
   "$HELPER_DIR" \
   "$DAEMON_DIR"
 cp "$ROOT_DIR/Resources/Info.plist" "$APP_CONTENTS/Info.plist"
@@ -80,8 +86,9 @@ if [[ -n "$SUPABASE_KEY_VALUE" ]]; then
 fi
 cp "$BIN_DIR/CellDock" "$APP_BINARY"
 cp "$BIN_DIR/CellDockNetworkHelper" "$HELPER_DIR/CellDockNetworkHelper"
-cp "$ROOT_DIR/Resources/app.mavo.celldock.network.helper.plist" \
-  "$DAEMON_DIR/app.mavo.celldock.network.helper.plist"
+ditto "$BIN_DIR/Sparkle.framework" "$APP_FRAMEWORKS/Sparkle.framework"
+cp "$ROOT_DIR/Resources/app.celldock.mac.network.helper.plist" \
+  "$DAEMON_DIR/app.celldock.mac.network.helper.plist"
 cp "$ROOT_DIR/Resources/CellDock.icns" "$APP_RESOURCES/CellDock.icns"
 cp -R "$ROOT_DIR/Resources/Localization/"*.lproj "$APP_RESOURCES/"
 mkdir -p "$APP_RESOURCES/Sounds"
@@ -104,7 +111,7 @@ fi
 
 xattr -cr "$APP_BUNDLE"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
-  --identifier app.mavo.celldock.network.helper \
+  --identifier app.celldock.mac.network.helper \
   "$HELPER_DIR/CellDockNetworkHelper"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
   --identifier "$BUNDLE_ID" "$APP_BUNDLE"

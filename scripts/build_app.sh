@@ -282,6 +282,21 @@ if [[ "$SIGNING_MODE" != development ]]; then
     }
   done
 fi
+# Check both slices of the extracted archive: a valid signature alone does not
+# guarantee that hardened-runtime builds can request privacy permissions.
+for architecture in arm64 x86_64; do
+  VERIFY_ENTITLEMENTS="$VERIFY_DIR/CellDock-$architecture.entitlements"
+  codesign --display --arch "$architecture" --entitlements - --xml \
+    "$VERIFY_APP" > "$VERIFY_ENTITLEMENTS"
+  for entitlement in \
+    com.apple.security.device.audio-input \
+    com.apple.security.personal-information.addressbook; do
+    [[ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$VERIFY_ENTITLEMENTS")" == true ]] || {
+      print -u2 "Archive is missing required entitlement $entitlement for $architecture."
+      exit 1
+    }
+  done
+done
 plutil -lint "$VERIFY_APP/Contents/Info.plist"
 plutil -lint "$VERIFY_PLIST"
 [[ "$(plutil -extract CFBundleShortVersionString raw "$VERIFY_APP/Contents/Info.plist")" == "$VERSION" ]] || {
