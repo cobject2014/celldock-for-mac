@@ -1815,3 +1815,4 @@
 "恢复超时，通话状态未知" = "Délai de récupération dépassé ; état de l’appel inconnu";
 "重新连接模块" = "Reconnecter le module";
 "清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Effacer la session locale et détecter le module à son emplacement USB d’origine sans envoyer de commande de raccrochage.";
+"通话已结束，原因未知" = "Appel terminé ; raison inconnue";

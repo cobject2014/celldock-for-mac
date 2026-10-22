@@ -27,6 +27,27 @@ swiftc -swift-version 5 \
 "$ROOT/.build/self-tests/CallRecoverySelfTests"
 xcrun swift "$ROOT/Tests/CallRecoveryReconnectSelfTests.swift"
 xcrun swift "$ROOT/Tests/CallRecoveryAudioErrorSelfTests.swift"
+swiftc -swift-version 5 -parse-as-library -framework AppKit \
+  "$ROOT/Sources/CellDock/AppTerminationCoordinator.swift" \
+  "$ROOT/Tests/AppTerminationSelfTests.swift" \
+  -o "$ROOT/.build/self-tests/AppTerminationSelfTests"
+"$ROOT/.build/self-tests/AppTerminationSelfTests"
+swiftc -swift-version 5 \
+  "$ROOT/Sources/CellDock/AppLanguage.swift" \
+  "$ROOT/Sources/CellDock/CellularModuleID.swift" \
+  "$ROOT/Sources/CellDock/CallModels.swift" \
+  "$ROOT/Sources/CellDock/CallATParser.swift" \
+  "$ROOT/Sources/CellDock/Models.swift" \
+  "$ROOT/Sources/CellDockNetworkIPC/CellDockNetworkIPC.swift" \
+  "$ROOT/Sources/CellDock/PhoneNumberNormalizer.swift" \
+  "$ROOT/Sources/CellDock/SMSVerificationCode.swift" \
+  "$ROOT/Sources/CellDock/VerificationMessageAutoDelete.swift" \
+  "$ROOT/Sources/CellDock/ATResponseParser.swift" \
+  "$ROOT/Sources/CellDock/SMSPDUDecoder.swift" \
+  "$ROOT/Sources/CellDock/CarrierNameFormatter.swift" \
+  "$ROOT/Tests/CallEndEvidenceSelfTests.swift" \
+  -o "$ROOT/.build/self-tests/CallEndEvidenceSelfTests"
+"$ROOT/.build/self-tests/CallEndEvidenceSelfTests"
 
 xcrun swift "$ROOT/scripts/build_module_voice_payload.swift" \
   "$ROOT/Resources/ModuleVoice" \

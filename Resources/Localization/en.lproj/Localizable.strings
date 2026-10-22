@@ -1818,3 +1818,4 @@
 "恢复超时，通话状态未知" = "Recovery timed out; call status unknown";
 "重新连接模块" = "Reconnect module";
 "清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Clear the local session and rediscover the module at the original USB location without sending a hangup command.";
+"通话已结束，原因未知" = "Call ended; reason unknown";
