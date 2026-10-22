@@ -334,17 +334,30 @@ struct CompactCallContent: View {
 
     private var finishingCallContent: some View {
         HStack {
-            ProgressView()
-                .controlSize(.small)
-            Text(appState.call.phase == .recovering
-                ? L10n.tr("正在核对通话状态…")
-                : L10n.tr("正在结束通话…"))
+            if appState.call.recoveryTimedOut {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            Text(appState.call.recoveryTimedOut
+                ? L10n.tr("恢复超时，通话状态未知")
+                : (appState.call.phase == .recovering
+                    ? L10n.tr("正在核对通话状态…")
+                    : L10n.tr("正在结束通话…")))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
-            if appState.call.phase == .recovering {
+            if appState.call.recoveryTimedOut {
+                Button(L10n.tr("重新连接模块")) {
+                    appState.reconnectAfterCallRecoveryTimeout()
+                }
+                .adaptiveGlassButton()
+                .help(L10n.tr("清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。"))
+                .disabled(appState.isChangingCall)
+            } else if appState.call.phase == .recovering {
                 Button(L10n.tr("重试挂断"), role: .destructive) {
                     appState.hangUp()
                 }

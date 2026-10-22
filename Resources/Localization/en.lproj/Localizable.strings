@@ -1811,3 +1811,10 @@
 "正在生成欢迎语，请稍候。" = "A greeting is being generated. Please wait.";
 "TTS 请求失败（HTTP %d）。" = "TTS request failed (HTTP %d).";
 "TTS 连接失败（错误码 %d）。" = "TTS connection failed (error %d).";
+"通话状态未知，本地会话已重置" = "Call status unknown; local session reset";
+"当前无法重新连接通话模块。" = "Cannot reconnect the call module right now.";
+"本地音频尚未停止，请稍后重试。" = "Local audio has not stopped yet. Please try again shortly.";
+"已重置本地会话并重新检测模块；未发送挂断命令。" = "Local session reset and module detection restarted; no hangup command was sent.";
+"恢复超时，通话状态未知" = "Recovery timed out; call status unknown";
+"重新连接模块" = "Reconnect module";
+"清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Clear the local session and rediscover the module at the original USB location without sending a hangup command.";

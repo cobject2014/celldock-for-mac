@@ -128,6 +128,8 @@ final class ModemService {
     private let archivedSMSCleanup = SMSArchiveCleanup()
     private var messageStorageSyncTracker = MessageStorageSyncTracker()
     private var callSnapshot = CallSnapshot()
+    private var callRecoveryDeadline = CallRecoveryDeadline()
+    private var reconnectLocationID: UInt32?
     private var callURCFramer = CallURCStreamFramer()
     private var callStateChangedAt = Date.distantPast
     private var callPollMisses = 0
@@ -155,9 +157,9 @@ final class ModemService {
 
     init(locationID: UInt32? = nil) {
         preferredLocationID = locationID
-        voiceAudio.onError = { [weak self] error in
+        voiceAudio.onError = { [weak self] error, session in
             self?.queue.async {
-                guard let self else { return }
+                guard let self, self.voiceAudio.isCurrentSession(session) else { return }
                 self.callSnapshot.audioActive = false
                 self.callSnapshot.lastError = error
                 self.publishCallSnapshot()
@@ -771,6 +773,44 @@ final class ModemService {
                     }
                     self.beginAnsweringCall(token: token, completion: completion)
                 }
+            }
+        }
+    }
+
+    /// Explicitly abandon the stale local session, not the cellular call. Never
+    /// send ATH or media-cleanup commands using the old device's ownership.
+    func reconnectAfterCallRecoveryTimeout(completion: @escaping (ModemActionResult) -> Void) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard self.callSnapshot.phase == .recovering,
+                  self.callSnapshot.recoveryTimedOut,
+                  !self.callActionInFlight, !self.euiccOperationInFlight,
+                  let modem = self.modem, self.modemLocationID != 0 else {
+                DispatchQueue.main.async { completion(.failure(L10n.tr("当前无法重新连接通话模块。"))) }
+                return
+            }
+            self.cancelQDCInitializationRetry()
+            self.cancelPendingQDCMediaSession()
+            self.invalidateCallAction()
+            self.voiceAudio.setMediaEnabled(false)
+            guard self.stopVoiceAudioAndWait(), !self.voiceAudio.hasUnresolvedUACCleanup else {
+                DispatchQueue.main.async { completion(.failure(L10n.tr("本地音频尚未停止，请稍后重试。"))) }
+                return
+            }
+            // Keep the original USB location pinned; do not fall back to another dongle.
+            self.reconnectLocationID = self.modemLocationID
+            celldock_modem_close(modem)
+            self.resetSMSConnectionState()
+            self.resetCallConnectionState(disconnected: false, endReason: .statusUnknown)
+            self.modemRegistryID = 0
+            self.modemGeneration &+= 1
+            self.snapshot = ModemSnapshot(state: .disconnected)
+            self.publishSnapshot(self.snapshot)
+            // The normal open path records the new USB instance and checks CLCC
+            // before initialization. Existing calls never acquire the microphone.
+            self.tick()
+            DispatchQueue.main.async {
+                completion(.success(L10n.tr("已重置本地会话并重新检测模块；未发送挂断命令。")))
             }
         }
     }
@@ -2350,7 +2390,7 @@ final class ModemService {
         publishCallSnapshot()
     }
 
-    private func resetCallConnectionState(disconnected: Bool) {
+    private func resetCallConnectionState(disconnected: Bool, endReason: CallEndReason? = nil) {
         let hadCall = callSnapshot.hasCall
         cancelQDCInitializationRetry()
         cancelPendingQDCMediaSession()
@@ -2366,7 +2406,7 @@ final class ModemService {
         callPollMisses = 0
         callSnapshot = CallSnapshot(
             phase: .unavailable,
-            lastEndReason: hadCall || disconnected ? .deviceDisconnected : nil
+            lastEndReason: endReason ?? (hadCall || disconnected ? .deviceDisconnected : nil)
         )
         publishCallSnapshot()
     }
@@ -2503,6 +2543,19 @@ final class ModemService {
 
     private func tick() {
         guard let modem else { return }
+        if callSnapshot.phase == .recovering {
+            publishCallSnapshot()
+            if callSnapshot.recoveryTimedOut {
+                // Keep the unknown call reserved, but stop the endless open/query loop.
+                cancelPendingQDCMediaSession()
+                voiceAudio.setMediaEnabled(false)
+                if callSnapshot.audioActive {
+                    callSnapshot.audioActive = false
+                    publishCallSnapshot()
+                }
+                return
+            }
+        }
         tickNumber += 1
 
         if !isOpen {
@@ -2522,6 +2575,8 @@ final class ModemService {
                     return
                 }
                 result = celldock_modem_open_for_location(modem, modemLocationID)
+            } else if let reconnectLocationID {
+                result = celldock_modem_open_for_location(modem, reconnectLocationID)
             } else if let preferredLocationID {
                 result = celldock_modem_open_for_location(modem, preferredLocationID)
             } else {
@@ -2546,6 +2601,7 @@ final class ModemService {
                     return
                 }
                 resetSMSConnectionState()
+                reconnectLocationID = nil
                 consumeBufferedURCsBeforeCommands()
                 if wasRecoveringCall {
                     if sameDevice {
@@ -3182,7 +3238,7 @@ final class ModemService {
     }
 
     private func pumpUnsolicitedEvents() {
-        guard isOpen else { return }
+        guard isOpen, !callSnapshot.recoveryTimedOut else { return }
         consumeURCBytes(readPendingEvents(timeout: 5))
     }
 
@@ -3311,7 +3367,12 @@ final class ModemService {
     private func refreshCallState() {
         guard isOpen, callSnapshot.hasCall else { return }
         let response = command("AT+CLCC", timeout: 2_500)
-        guard response.isSuccess else { return }
+        guard response.isSuccess else {
+            callSnapshot.phase = .recovering
+            callSnapshot.lastError = response.error ?? L10n.tr("无法读取 CLCC")
+            publishCallSnapshot()
+            return
+        }
         let calls = CallATParser.parseCLCCResponse(response.output)
         guard !calls.isEmpty else {
             if Date().timeIntervalSince(callStateChangedAt) >= 3 {
@@ -3653,6 +3714,10 @@ final class ModemService {
     }
 
     private func publishCallSnapshot() {
+        callSnapshot.recoveryTimedOut = callRecoveryDeadline.update(
+            phase: callSnapshot.phase,
+            now: ProcessInfo.processInfo.systemUptime
+        )
         if let pcm = welcomeTrigger.take(hasCall: callSnapshot.hasCall,
                                          active: callSnapshot.phase == .active,
                                          audioReady: callSnapshot.audioActive) {

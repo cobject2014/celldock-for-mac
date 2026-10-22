@@ -24,7 +24,7 @@ struct CallHistoryRecord: Identifiable, Codable, Equatable {
     }
 
     var isMissed: Bool {
-        direction == .incoming && !wasAnswered && endReason != .localHangup
+        direction == .incoming && !wasAnswered && endReason != .localHangup && endReason != .statusUnknown
     }
 
     var isUnacknowledgedMissed: Bool {
@@ -111,7 +111,7 @@ final class CallHistoryStore: ObservableObject {
         let endReason = current.lastEndReason ?? previous.lastEndReason
         let isMissed = pendingCall.direction == .incoming &&
             pendingCall.connectedAt == nil &&
-            endReason != .localHangup
+            endReason != .localHangup && endReason != .statusUnknown
         let record = CallHistoryRecord(
             id: pendingCall.id,
             direction: pendingCall.direction,

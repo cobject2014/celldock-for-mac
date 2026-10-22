@@ -1,5 +1,19 @@
 import Foundation
 
+struct CallRecoveryDeadline {
+    private var startedAt: TimeInterval?
+
+    // Use monotonic time. Repeated failure publications must not extend the deadline.
+    mutating func update(phase: CallPhase, now: TimeInterval) -> Bool {
+        guard phase == .recovering else {
+            startedAt = nil
+            return false
+        }
+        if startedAt == nil { startedAt = now }
+        return now - startedAt! >= 30
+    }
+}
+
 struct AutomaticAnswerGate {
     private var observedID: UUID?
     private var deadline: TimeInterval?
@@ -50,6 +64,7 @@ enum CallEndReason: String, Codable, Equatable {
     case noAnswer
     case noDialTone
     case deviceDisconnected
+    case statusUnknown
     case failed
 
     var localizedDescription: String {
@@ -60,6 +75,7 @@ enum CallEndReason: String, Codable, Equatable {
         case .noAnswer: return L10n.tr("无人接听")
         case .noDialTone: return L10n.tr("网络未提供拨号音")
         case .deviceDisconnected: return L10n.tr("模块已拔出，通话结束")
+        case .statusUnknown: return L10n.tr("通话状态未知，本地会话已重置")
         case .failed: return L10n.tr("通话失败")
         }
     }
@@ -88,6 +104,7 @@ struct CallSnapshot: Equatable {
     var controlInterfaceBusy = false
     var mediaCleanupPending = false
     var uacMedia: UACMediaSnapshot?
+    var recoveryTimedOut = false
 
     var hasCall: Bool {
         switch phase {

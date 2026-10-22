@@ -31,7 +31,7 @@ enum CallTonePolicy {
     }
 
     static func wantsHangupTone(for completedCall: CallHistoryRecord?) -> Bool {
-        completedCall?.wasAnswered == true
+        completedCall?.wasAnswered == true && completedCall?.endReason != .statusUnknown
     }
 }
 

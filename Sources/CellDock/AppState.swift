@@ -2301,6 +2301,18 @@ final class AppState: ObservableObject {
         }
     }
 
+    func reconnectAfterCallRecoveryTimeout() {
+        guard call.recoveryTimedOut, !isChangingCall,
+              let service = modemService(for: activeCallModuleID ?? call.moduleID) else { return }
+        automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
+        isChangingCall = true
+        service.reconnectAfterCallRecoveryTimeout { [weak self] result in
+            guard let self else { return }
+            self.isChangingCall = false
+            self.show(result)
+        }
+    }
+
     func hangUp() {
         automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
         guard !isChangingCall else { return }

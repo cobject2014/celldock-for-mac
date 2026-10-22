@@ -316,17 +316,28 @@ private struct CallIslandView: View {
         HStack(spacing: 10) {
             callerButton
             Spacer(minLength: 4)
-            if appState.isChangingCall || [.ending, .recovering].contains(appState.call.phase) {
+            if !appState.call.recoveryTimedOut && (appState.isChangingCall || [.ending, .recovering].contains(appState.call.phase)) {
                 ProgressView().controlSize(.small)
             }
-            islandActionButton(
-                title: L10n.tr("挂断"),
-                systemImage: "phone.down.fill",
-                tint: .red,
-                isProminent: true,
-                isEnabled: !appState.isChangingCall || appState.call.phase == .recovering,
-                action: appState.hangUp
-            )
+            if appState.call.recoveryTimedOut {
+                islandActionButton(
+                    title: L10n.tr("重新连接模块"),
+                    systemImage: "arrow.clockwise",
+                    tint: .orange,
+                    isEnabled: !appState.isChangingCall,
+                    action: appState.reconnectAfterCallRecoveryTimeout
+                )
+                .help(L10n.tr("清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。"))
+            } else {
+                islandActionButton(
+                    title: L10n.tr("挂断"),
+                    systemImage: "phone.down.fill",
+                    tint: .red,
+                    isProminent: true,
+                    isEnabled: !appState.isChangingCall || appState.call.phase == .recovering,
+                    action: appState.hangUp
+                )
+            }
         }
         .padding(10)
         .callIslandSurface(cornerRadius: 32)
@@ -451,7 +462,9 @@ private struct CallIslandView: View {
         case .ending:
             Text(L10n.tr("正在结束通话"))
         case .recovering:
-            Text(L10n.tr("正在核对通话状态…"))
+            Text(appState.call.recoveryTimedOut
+                ? L10n.tr("恢复超时，通话状态未知")
+                : L10n.tr("正在核对通话状态…"))
         case .idle, .unavailable, .error:
             EmptyView()
         }

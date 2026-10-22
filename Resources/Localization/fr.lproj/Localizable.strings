@@ -1808,3 +1808,10 @@
 "正在生成欢迎语，请稍候。" = "Un message est en cours de génération. Veuillez patienter.";
 "TTS 请求失败（HTTP %d）。" = "Échec de la requête TTS (HTTP %d).";
 "TTS 连接失败（错误码 %d）。" = "Échec de la connexion TTS (erreur %d).";
+"通话状态未知，本地会话已重置" = "État de l’appel inconnu ; session locale réinitialisée";
+"当前无法重新连接通话模块。" = "Impossible de reconnecter le module d’appel pour le moment.";
+"本地音频尚未停止，请稍后重试。" = "L’audio local n’est pas encore arrêté. Réessayez dans un instant.";
+"已重置本地会话并重新检测模块；未发送挂断命令。" = "Session locale réinitialisée et détection du module relancée ; aucune commande de raccrochage envoyée.";
+"恢复超时，通话状态未知" = "Délai de récupération dépassé ; état de l’appel inconnu";
+"重新连接模块" = "Reconnecter le module";
+"清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Effacer la session locale et détecter le module à son emplacement USB d’origine sans envoyer de commande de raccrochage.";

@@ -7,7 +7,7 @@ import Foundation
 /// The modem side can be QPCMV option 0 or CellDock's QDC507 PCM helper.
 /// USB waits and sample-rate conversion never run on the CoreAudio render thread.
 final class VoiceAudioService {
-    var onError: ((String) -> Void)?
+    var onError: ((String, UInt64) -> Void)?
 
     private struct DeferredUACCleanup {
         let pointer: OpaquePointer
@@ -979,7 +979,7 @@ final class VoiceAudioService {
         let message = raw.isEmpty ? L10n.tr("USB 语音接口已断开。") : raw
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrentSession(session) else { return }
-            self.onError?(message)
+            self.onError?(message, session)
         }
     }
 
@@ -1064,11 +1064,12 @@ final class VoiceAudioService {
         guard isCurrentSession(session) else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrentSession(session) else { return }
-            self.onError?(message)
+            self.onError?(message, session)
         }
     }
 
-    private func isCurrentSession(_ session: UInt64) -> Bool {
+    // Consumers must recheck after hopping to their own serial queue.
+    func isCurrentSession(_ session: UInt64) -> Bool {
         stateLock.withLock { sessionGeneration == session }
     }
 

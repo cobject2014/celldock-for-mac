@@ -15,6 +15,18 @@ for language in zh-Hans en ja fr; do
 done
 "$ROOT/scripts/check_localizations.py"
 xcrun swift "$ROOT/Tests/CallIslandResizeSelfTests.swift"
+swiftc -swift-version 5 \
+  "$ROOT/Sources/CellDock/AppLanguage.swift" \
+  "$ROOT/Sources/CellDock/AppIdentityMigration.swift" \
+  "$ROOT/Sources/CellDock/CellularModuleID.swift" \
+  "$ROOT/Sources/CellDock/CallModels.swift" \
+  "$ROOT/Sources/CellDock/CallHistoryStore.swift" \
+  "$ROOT/Sources/CellDock/CallToneSynthesizer.swift" \
+  "$ROOT/Tests/CallRecoverySelfTests.swift" \
+  -o "$ROOT/.build/self-tests/CallRecoverySelfTests"
+"$ROOT/.build/self-tests/CallRecoverySelfTests"
+xcrun swift "$ROOT/Tests/CallRecoveryReconnectSelfTests.swift"
+xcrun swift "$ROOT/Tests/CallRecoveryAudioErrorSelfTests.swift"
 
 xcrun swift "$ROOT/scripts/build_module_voice_payload.swift" \
   "$ROOT/Resources/ModuleVoice" \
