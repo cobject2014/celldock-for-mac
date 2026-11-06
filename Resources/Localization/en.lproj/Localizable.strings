@@ -1819,3 +1819,9 @@
 "重新连接模块" = "Reconnect module";
 "清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Clear the local session and rediscover the module at the original USB location without sending a hangup command.";
 "通话已结束，原因未知" = "Call ended; reason unknown";
+"自动接听失败（%lld/3）：%@" = "Automatic answer failed (%lld/3): %@";
+"仍在振铃时，3 秒后重试。" = "Retrying in 3 seconds if still ringing.";
+"已停止自动重试，请手动处理。" = "Automatic retries stopped. Please handle the call manually.";
+"通话组件尚未就绪，请重试初始化。" = "Call components are not ready. Please retry initialization.";
+"模块控制接口被 adb、Android Studio 或另一份 CellDock 占用，请释放接口后重试初始化。" = "The module control interface is in use by adb, Android Studio, or another CellDock. Release it and retry initialization.";
+"语音媒体尚在清理，请稍后重试。" = "Call media cleanup is still in progress. Please retry shortly.";

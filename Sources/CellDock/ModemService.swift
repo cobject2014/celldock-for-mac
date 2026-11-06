@@ -743,6 +743,12 @@ final class ModemService {
                 DispatchQueue.main.async { completion(.failure(L10n.tr("当前没有可接听的来电。"))) }
                 return
             }
+            guard !self.hasPendingMediaCleanup else {
+                DispatchQueue.main.async {
+                    completion(.failure(L10n.tr("语音媒体尚在清理，请稍后重试。")))
+                }
+                return
+            }
             let token = self.beginCallAction()
             self.listenOnlyCall = listenOnly
             self.welcomeTrigger.arm(pcm: welcomePCM, automatic: listenOnly)
@@ -1587,6 +1593,15 @@ final class ModemService {
         token: CallActionToken,
         completion: @escaping (ModemActionResult) -> Void
     ) {
+        guard callSnapshot.voiceOverUSBSupported else {
+            // RING clears lastError, but interface ownership survives in the snapshot.
+            let reason = callSnapshot.controlInterfaceBusy
+                ? L10n.tr("模块控制接口被 adb、Android Studio 或另一份 CellDock 占用，请释放接口后重试初始化。")
+                : (callSnapshot.lastError ?? L10n.tr("通话组件尚未就绪，请重试初始化。"))
+            failCallSetup(.failure(reason),
+                          completion: completion, preserveIncoming: true)
+            return
+        }
         callSnapshot.lastError = nil
         callSnapshot.clearEnd()
         publishCallSnapshot()
@@ -2926,7 +2941,9 @@ final class ModemService {
                 )
             } catch {
                 callMediaBackend = .none
-                mediaError = L10n.error("QDC507 通话组件尚不可用：%@", underlying: error)
+                mediaError = ADBModuleController.isInterfaceBusyError(error)
+                    ? L10n.tr("模块控制接口被 adb、Android Studio 或另一份 CellDock 占用，请释放接口后重试初始化。")
+                    : L10n.error("QDC507 通话组件尚不可用：%@", underlying: error)
                 snapshot.voiceCapability = .initializationFailed(
                     reason: mediaError ?? L10n.tr("Baiwang 语音组件初始化失败。")
                 )
@@ -3072,10 +3089,9 @@ final class ModemService {
             callMediaBackend = .none
             callSnapshot.phase = .unavailable
             callSnapshot.voiceOverUSBSupported = false
-            callSnapshot.lastError = L10n.error(
-                "QDC507 通话组件尚不可用：%@",
-                underlying: error
-            )
+            callSnapshot.lastError = ADBModuleController.isInterfaceBusyError(error)
+                ? L10n.tr("模块控制接口被 adb、Android Studio 或另一份 CellDock 占用，请释放接口后重试初始化。")
+                : L10n.error("QDC507 通话组件尚不可用：%@", underlying: error)
             callSnapshot.controlInterfaceBusy = ADBModuleController.isInterfaceBusyError(error)
             snapshot.voiceCapability = .initializationFailed(
                 reason: callSnapshot.lastError ?? L10n.tr("Baiwang 语音组件初始化失败。")

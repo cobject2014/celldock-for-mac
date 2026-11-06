@@ -17,6 +17,13 @@ done
 xcrun swift "$ROOT/Tests/CallIslandResizeSelfTests.swift"
 swiftc -swift-version 5 \
   "$ROOT/Sources/CellDock/AppLanguage.swift" \
+  "$ROOT/Sources/CellDock/CellularModuleID.swift" \
+  "$ROOT/Sources/CellDock/CallModels.swift" \
+  "$ROOT/Tests/AutomaticAnswerRetrySelfTests.swift" \
+  -o "$ROOT/.build/self-tests/AutomaticAnswerRetrySelfTests"
+"$ROOT/.build/self-tests/AutomaticAnswerRetrySelfTests"
+swiftc -swift-version 5 \
+  "$ROOT/Sources/CellDock/AppLanguage.swift" \
   "$ROOT/Sources/CellDock/AppIdentityMigration.swift" \
   "$ROOT/Sources/CellDock/CellularModuleID.swift" \
   "$ROOT/Sources/CellDock/CallModels.swift" \

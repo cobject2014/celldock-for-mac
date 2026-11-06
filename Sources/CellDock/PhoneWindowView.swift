@@ -610,6 +610,11 @@ private struct ActiveCallView: View {
 
             recordingStatus
 
+            if let failure = appState.automaticAnswerFailure, appState.call.phase == .incoming {
+                Text(verbatim: failure)
+                    .font(.caption).foregroundStyle(.orange).frame(maxWidth: 460)
+            }
+
             if let error = appState.call.lastError, appState.call.phase == .recovering {
                 Label(L10n.tr(error), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)

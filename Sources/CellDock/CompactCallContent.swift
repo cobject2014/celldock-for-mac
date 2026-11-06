@@ -167,6 +167,9 @@ struct CompactCallContent: View {
                 Text(L10n.tr("蜂窝来电"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let failure = appState.automaticAnswerFailure {
+                    Text(verbatim: failure).font(.caption).foregroundStyle(.orange)
+                }
             }
 
             Spacer()

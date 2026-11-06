@@ -62,6 +62,8 @@ final class AppState: ObservableObject {
     @Published private(set) var automaticAnswerDelay = max(1, min(60,
         (UserDefaults.standard.object(forKey: "AutomaticAnswerDelay.v1") as? Int) ?? 3))
     private var automaticAnswerGate = AutomaticAnswerGate()
+    @Published private(set) var automaticAnswerFailure: String?
+    private var automaticAnswerFailureCallID: UUID?
     private var automaticAnswerTimer: Task<Void, Never>?
     private var automaticallyAnsweredCallID: UUID?
     @Published private(set) var isPresentationPrivacyEnabled: Bool
@@ -2270,6 +2272,7 @@ final class AppState: ObservableObject {
 
     func answerCall() {
         guard !AppTerminationCoordinator.shared.isTerminationPending else { return }
+        automaticAnswerFailure = nil
         automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
         automaticallyAnsweredCallID = nil
         answerCall(listenOnly: false)
@@ -2278,7 +2281,10 @@ final class AppState: ObservableObject {
     func setAutomaticallyAnswerCalls(_ enabled: Bool) {
         automaticallyAnswerCalls = enabled
         UserDefaults.standard.set(enabled, forKey: "AutomaticallyAnswerCalls.v1")
-        if !enabled { automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID)) }
+        if !enabled {
+            automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
+            automaticAnswerFailure = nil
+        }
     }
 
     func setAutomaticAnswerDelay(_ seconds: Int) {
@@ -2289,16 +2295,19 @@ final class AppState: ObservableObject {
     private func checkAutomaticAnswer() {
         guard !AppTerminationCoordinator.shared.isTerminationPending else { return }
         let id = callHistory.currentCallID(for: call.moduleID)
+        if id != automaticAnswerFailureCallID || !automaticallyAnswerCalls || call.phase != .incoming {
+            automaticAnswerFailure = nil
+        }
         let eligible = automaticallyAnswerCalls && call.phase == .incoming &&
-            !isChangingCall && !euiccSnapshot(for: call.moduleID).isBusy &&
+            !isChangingCall && !call.mediaCleanupPending && !euiccSnapshot(for: call.moduleID).isBusy &&
             !moduleCallSnapshots.contains { $0.key != call.moduleID && $0.value.phase == .active }
         guard automaticAnswerGate.shouldAnswer(callID: id, eligible: eligible,
             now: ProcessInfo.processInfo.systemUptime, delay: automaticAnswerDelay) else { return }
         automaticallyAnsweredCallID = id
-        answerCall(listenOnly: true)
+        answerCall(listenOnly: true, automaticCallID: id)
     }
 
-    private func answerCall(listenOnly: Bool) {
+    private func answerCall(listenOnly: Bool, automaticCallID: UUID? = nil) {
         guard !AppTerminationCoordinator.shared.isTerminationPending else { return }
         let moduleID = activeCallModuleID ?? call.moduleID
         guard let service = modemService(for: moduleID) else {
@@ -2315,6 +2324,23 @@ final class AppState: ObservableObject {
         service.answerCall(listenOnly: listenOnly, welcomePCM: welcomePCM) { [weak self] result in
             guard let self else { return }
             self.isChangingCall = false
+            if let id = automaticCallID {
+                let succeeded: Bool
+                switch result {
+                case .success: succeeded = true
+                case .failure: succeeded = false
+                }
+                let accepted = self.automaticAnswerGate.complete(callID: id, succeeded: succeeded,
+                    now: ProcessInfo.processInfo.systemUptime)
+                if accepted, case let .failure(reason) = result,
+                   self.callHistory.currentCallID(for: self.call.moduleID) == id,
+                   self.call.phase == .incoming, self.automaticallyAnswerCalls {
+                    self.automaticAnswerFailureCallID = id
+                    self.automaticAnswerFailure = L10n.tr("自动接听失败（%lld/3）：%@", Int64(self.automaticAnswerGate.attempts), reason)
+                        + "\n" + (self.automaticAnswerGate.attempts < 3
+                            ? L10n.tr("仍在振铃时，3 秒后重试。") : L10n.tr("已停止自动重试，请手动处理。"))
+                }
+            }
             self.show(result)
         }
     }
@@ -2334,6 +2360,7 @@ final class AppState: ObservableObject {
 
     func hangUp() {
         guard !AppTerminationCoordinator.shared.isTerminationPending else { return }
+        automaticAnswerFailure = nil
         automaticAnswerGate.suppress(callID: callHistory.currentCallID(for: call.moduleID))
         guard !isChangingCall else { return }
         guard let service = modemService(for: activeCallModuleID ?? call.moduleID) else {

@@ -18,24 +18,43 @@ struct AutomaticAnswerGate {
     private var observedID: UUID?
     private var deadline: TimeInterval?
     private var suppressedID: UUID?
+    private var inFlight = false
+    private(set) var attempts = 0
+
+    @discardableResult
+    mutating func complete(callID: UUID, succeeded: Bool, now: TimeInterval) -> Bool {
+        guard observedID == callID, suppressedID != callID, inFlight else { return false }
+        inFlight = false
+        if succeeded || attempts >= 3 {
+            suppress(callID: callID)
+        } else {
+            deadline = now + 3
+        }
+        return true
+    }
 
     mutating func suppress(callID: UUID?) {
         suppressedID = callID
         deadline = nil
+        inFlight = false
     }
 
     mutating func shouldAnswer(callID: UUID?, eligible: Bool, now: TimeInterval, delay: Int) -> Bool {
         if observedID != callID {
             observedID = callID
             deadline = nil
+            attempts = 0
+            inFlight = false
         }
         guard let callID, eligible, suppressedID != callID else {
             deadline = nil
             return false
         }
-        if deadline == nil { deadline = now + Double(max(1, min(60, delay))) }
+        guard !inFlight, attempts < 3 else { return false }
+        if deadline == nil { deadline = now + Double(attempts == 0 ? max(1, min(60, delay)) : 3) }
         guard now >= deadline! else { return false }
-        suppress(callID: callID)
+        inFlight = true
+        attempts += 1
         return true
     }
 }

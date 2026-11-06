@@ -1816,3 +1816,9 @@
 "重新连接模块" = "Reconnecter le module";
 "清理本地会话并重新检测原 USB 位置的模块，不发送挂断命令。" = "Effacer la session locale et détecter le module à son emplacement USB d’origine sans envoyer de commande de raccrochage.";
 "通话已结束，原因未知" = "Appel terminé ; raison inconnue";
+"自动接听失败（%lld/3）：%@" = "Échec de la réponse automatique (%lld/3) : %@";
+"仍在振铃时，3 秒后重试。" = "Nouvel essai dans 3 secondes si l’appel sonne encore.";
+"已停止自动重试，请手动处理。" = "Les essais automatiques sont arrêtés. Veuillez intervenir manuellement.";
+"通话组件尚未就绪，请重试初始化。" = "Les composants d’appel ne sont pas prêts. Réessayez l’initialisation.";
+"模块控制接口被 adb、Android Studio 或另一份 CellDock 占用，请释放接口后重试初始化。" = "L’interface de contrôle du module est utilisée par adb, Android Studio ou une autre instance de CellDock. Libérez-la puis réessayez l’initialisation.";
+"语音媒体尚在清理，请稍后重试。" = "Le nettoyage audio est en cours. Réessayez dans un instant.";
